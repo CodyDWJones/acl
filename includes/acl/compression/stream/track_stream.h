@@ -280,6 +280,18 @@ namespace acl
 		}
 	};
 
+	inline void sample_pose(const BoneStreams* bone_streams, uint16_t num_bones, uint32_t sample_index, Transform_32* out_local_pose, uint16_t num_transforms)
+	{
+		ACL_ENSURE(num_bones > 0, "Invalid number of bones: %u", num_bones);
+		ACL_ENSURE(num_bones == num_transforms, "Number of transforms does not match the number of bones: %u != %u", num_transforms, num_bones);
+
+		for (uint16_t bone_index = 0; bone_index < num_bones; ++bone_index)
+		{
+			const BoneStreams& bone = bone_streams[bone_index];
+			out_local_pose[bone_index] = transform_set(bone.get_rotation_sample(sample_index), bone.get_translation_sample(sample_index));
+		}
+	}
+
 	inline uint32_t get_animated_num_samples(const BoneStreams* bone_streams, uint16_t num_bones)
 	{
 		uint32_t num_samples = 1;

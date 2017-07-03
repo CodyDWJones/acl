@@ -30,6 +30,7 @@
 #include "acl/compression/skeleton_error_metric.h"
 
 #include "acl/algorithm/uniformly_sampled/algorithm.h"
+#include "acl/algorithm/spline_key_reduction/algorithm.h"
 
 #define NOMINMAX
 #include <Windows.h>
@@ -251,7 +252,7 @@ static BoneError find_max_error(Allocator& allocator, const AnimationClip& clip,
 	return BoneError{worst_bone, max_error, worst_sample_time};
 }
 
-static void try_algorithm(const Options& options, Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton, IAlgorithm &algorithm)
+static void try_algorithm(const Options& options, Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton, IAlgorithm& algorithm)
 {
 	using namespace acl;
 
@@ -321,6 +322,7 @@ static bool read_clip(Allocator& allocator, const char* filename,
 	return true;
 }
 
+
 int main(int argc, char** argv)
 {
 	Options options;
@@ -337,6 +339,15 @@ int main(int argc, char** argv)
 
 	// Compress & Decompress
 	{
+#if true
+		SplineKeyReductionAlgorithm spline_tests[] =
+		{
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None),
+		};
+
+		for (IAlgorithm& algorithm : spline_tests)
+			try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm);
+#else
 		bool use_segmenting_options[] = { false, true };
 
 		for (size_t segmenting_option_index = 0; segmenting_option_index < sizeof(use_segmenting_options) / sizeof(use_segmenting_options[0]); ++segmenting_option_index)
@@ -359,8 +370,8 @@ int main(int argc, char** argv)
 				UniformlySampledAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
 			};
 
-			for (UniformlySampledAlgorithm& algorithm : uniform_tests)
-				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm);
+			for (IAlgorithm& algorithm : uniform_tests)
+					try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm);
 		}
 
 		{
