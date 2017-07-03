@@ -302,7 +302,7 @@ static int main_impl(int argc, char** argv)
 				UniformlySampledAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations | RangeReductionFlags8::Scales, use_segmenting),
 			};
 
-			for (UniformlySampledAlgorithm& algorithm : uniform_tests)
+			for (IAlgorithm& algorithm : uniform_tests)
 				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm, logging, runs_writer);
 		}
 

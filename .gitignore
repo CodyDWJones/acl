@@ -1,3 +1,7 @@
 build/
 *.suo
 **/__pycache__/
+/*.user
+/tools/acl_compressor/x64
+/tools/acl_compressor/*.db
+/tools/acl_compressor/*.user

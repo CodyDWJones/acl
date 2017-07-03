@@ -37,7 +37,7 @@ namespace acl
 	{
 		UniformlySampled			= 0,
 		//LinearKeyReduction			= 1,
-		//SplineKeyReduction			= 2,
+		SplineKeyReduction			= 2,
 	};
 
 	//////////////////////////////////////////////////////////////////////////
@@ -49,7 +49,7 @@ namespace acl
 		{
 			case AlgorithmType8::UniformlySampled:
 			//case AlgorithmType8::LinearKeyReduction:
-			//case AlgorithmType8::SplineKeyReduction:
+			case AlgorithmType8::SplineKeyReduction:
 				return true;
 			default:
 				return false;
@@ -63,7 +63,7 @@ namespace acl
 		{
 			case AlgorithmType8::UniformlySampled:		return "Uniformly Sampled";
 			//case AlgorithmType8::LinearKeyReduction:	return "Linear Key Reduction";
-			//case AlgorithmType8::SplineKeyReduction:	return "Spline Key Reduction";
+			case AlgorithmType8::SplineKeyReduction:	return "Spline Key Reduction";
 			default:									return "<Invalid>";
 		}
 	}
