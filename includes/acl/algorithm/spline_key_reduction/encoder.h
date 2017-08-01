@@ -273,6 +273,9 @@ namespace acl
 					interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
 
 					double error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose, error_per_bone);
+
+					//printf("Error at %d is %f\n", sample_index, error);
+
 					if (error <= segment.clip->error_threshold)
 						continue;
 
@@ -373,7 +376,9 @@ namespace acl
 						num_translation_points = 0,
 						min_translation_points = changed_translation ? POLYNOMIAL_ORDER : 0;
 
-					while (sample_index > 0 && num_rotation_points < min_rotation_points && num_translation_points < min_translation_points)
+					while (sample_index > 0 &&
+						(num_rotation_points < min_rotation_points || min_rotation_points == 0) &&
+						(num_translation_points <= min_translation_points || min_translation_points == 0))
 					{
 						if (bad_bone_rotations == nullptr || !bad_bone_rotations->removed_sample(sample_index))
 							++num_rotation_points;
@@ -401,6 +406,8 @@ namespace acl
 
 				for (int32_t sample_index = first_sample_index; sample_index <= last_sample_index; ++sample_index)
 				{
+					uint32_t num_rotations = 0, num_translations = 0;
+
 					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 					{
 						const BoneStreams& bone = segment.bone_streams[bone_index];
@@ -420,6 +427,8 @@ namespace acl
 
 								RotationFormat8 format = bone.rotations.get_rotation_format();
 								animated_data_size += get_packed_rotation_size(format);
+
+								++num_rotations;
 							}
 						}
 
@@ -438,9 +447,13 @@ namespace acl
 
 								VectorFormat8 format = bone.translations.get_vector_format();
 								animated_data_size += get_packed_vector_size(format);
+
+								++num_translations;
 							}
 						}
 					}
+
+					printf("Sample_index %d has %d rotations and %d translations\n", sample_index, num_rotations, num_translations);
 				}
 
 				return animated_data_size;
