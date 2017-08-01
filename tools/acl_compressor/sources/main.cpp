@@ -264,6 +264,7 @@ static void try_algorithm(const Options& options, Allocator& allocator, const An
 	LARGE_INTEGER end_time_cycles;
 	QueryPerformanceCounter(&end_time_cycles);
 
+#if false
 	ACL_ENSURE(compressed_clip->is_valid(true), "Compressed clip is invalid");
 
 	void* context = algorithm.allocate_decompression_context(allocator, *compressed_clip);
@@ -274,6 +275,7 @@ static void try_algorithm(const Options& options, Allocator& allocator, const An
 
 	allocator.deallocate(compressed_clip, compressed_clip->get_size());
 	algorithm.deallocate_decompression_context(allocator, context);
+#endif
 }
 
 static bool read_clip(Allocator& allocator, const char* filename,
