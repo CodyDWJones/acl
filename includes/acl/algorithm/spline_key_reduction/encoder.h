@@ -401,9 +401,6 @@ namespace acl
 
 				for (int32_t sample_index = first_sample_index; sample_index <= last_sample_index; ++sample_index)
 				{
-					bool add_rotation_frame_header = false;
-					bool add_translation_frame_header = false;
-
 					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 					{
 						const BoneStreams& bone = segment.bone_streams[bone_index];
@@ -414,7 +411,9 @@ namespace acl
 							if (sample_index < 0 || sample_index >= segment.num_clip_samples || !rotation_encoder->removed_sample(sample_index))
 							{
 								if (0 <= sample_index && sample_index < segment.num_clip_samples)
-									add_rotation_frame_header = true;
+								{
+									animated_data_size += sizeof(sample_index);
+								}
 
 								// Knot
 								animated_data_size += sizeof(float);
@@ -430,7 +429,9 @@ namespace acl
 							if (sample_index < 0 || sample_index >= segment.num_clip_samples || !translation_encoder->removed_sample(sample_index))
 							{
 								if (0 <= sample_index && sample_index < segment.num_clip_samples)
-									add_translation_frame_header = true;
+								{
+									animated_data_size += sizeof(sample_index);
+								}
 
 								// Knot
 								animated_data_size += sizeof(float);
@@ -439,20 +440,6 @@ namespace acl
 								animated_data_size += get_packed_vector_size(format);
 							}
 						}
-					}
-
-					if (add_rotation_frame_header)
-					{
-						animated_data_size += sizeof(AnimationTrackType8);
-						animated_data_size += sizeof(sample_index);
-						animated_data_size += get_bitset_size(segment.num_bones);
-					}
-
-					if (add_translation_frame_header)
-					{
-						animated_data_size += sizeof(AnimationTrackType8);
-						animated_data_size += sizeof(sample_index);
-						animated_data_size += get_bitset_size(segment.num_bones);
 					}
 				}
 
