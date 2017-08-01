@@ -34,6 +34,7 @@ namespace acl
 	{
 		namespace impl
 		{
+			// TODO: not in a Constants struct...?
 			constexpr uint32_t POLYNOMIAL_ORDER = 3;
 			constexpr uint32_t FIRST_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
 
@@ -51,7 +52,7 @@ namespace acl
 				}
 			}
 
-			inline Vector4_32 interpolate(const Vector4_32* values, const float* knots, const float* sample_times, float sample_time)
+			inline Vector4_32 interpolate_spline(const Vector4_32* values, const float* knots, const float* sample_times, float sample_time)
 			{
 				float knot = knots[1] + (knots[2] - knots[1]) * (sample_time - sample_times[1]) / (sample_times[2] - sample_times[1]);
 

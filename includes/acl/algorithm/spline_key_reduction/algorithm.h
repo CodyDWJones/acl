@@ -37,22 +37,21 @@ namespace acl
 	{
 	public:
 		SplineKeyReductionAlgorithm(RotationFormat8 rotation_format, VectorFormat8 translation_format, RangeReductionFlags8 range_reduction)
-//			: m_compression_settings(rotation_format, translation_format, range_reduction)
+			: m_compression_settings(rotation_format, translation_format, range_reduction)
 		{
 		}
 
 		virtual CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton) override
 		{
-			//using namespace spline_key_reduction;
-
-			//ClipEncoder<CentripetalCatmullRomSpline> encoder(allocator, clip, skeleton, m_compression_settings);
-			//return encoder.get_compressed_clip();
+			return spline_key_reduction::compress_clip(allocator, clip, skeleton, m_compression_settings);
 		}
 
 		virtual void* allocate_decompression_context(Allocator& allocator, const CompressedClip& clip) override
 		{
 			//spline_key_reduction::DecompressionSettings settings;
 			//return spline_key_reduction::allocate_decompression_context(allocator, settings, clip);
+
+			return nullptr;
 		}
 
 		virtual void deallocate_decompression_context(Allocator& allocator, void* context) override
@@ -75,10 +74,10 @@ namespace acl
 
 		virtual void print_stats(const CompressedClip& clip, std::FILE* file) override
 		{
-			//spline_key_reduction::print_stats(clip, file);
+			spline_key_reduction::print_stats(clip, file);
 		}
 
 	private:
-		//spline_key_reduction::CompressionSettings m_compression_settings;
+		spline_key_reduction::CompressionSettings m_compression_settings;
 	};
 }

@@ -47,7 +47,9 @@ namespace acl
 				RotationFormat8			rotation_format;
 				VectorFormat8			translation_format;
 				RangeReductionFlags8	range_reduction;
-				float					clip_length;
+				uint32_t				num_samples;
+				uint32_t				sample_rate;								// TODO: Store duration as float instead
+				uint32_t				animated_pose_bit_size;						// TODO: Calculate from bitsets and formats?
 
 				PtrOffset16<uint32_t>	default_tracks_bitset_offset;
 				PtrOffset16<uint32_t>	constant_tracks_bitset_offset;
