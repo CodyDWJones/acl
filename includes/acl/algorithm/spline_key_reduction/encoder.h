@@ -112,18 +112,18 @@ namespace acl
 				void remove_sample(uint32_t sample_index) { bitset_set(m_remove, m_remove_size, sample_index, true); }
 				void keep_sample(uint32_t sample_index) { bitset_set(m_remove, m_remove_size, sample_index, false); }
 
-				Vector4_32 interpolate(int32_t at_sample_index) const
+				Vector4_64 interpolate(int32_t at_sample_index) const
 				{
 					if (!removed_sample(at_sample_index))
 					{
-						return m_get_sample(at_sample_index);
+						return vector_cast(m_get_sample(at_sample_index));
 					}
 
-					Vector4_32 values[POLYNOMIAL_ORDER + 1];
+					Vector4_64 values[POLYNOMIAL_ORDER + 1];
 					int32_t sample_indices[POLYNOMIAL_ORDER + 1];
-					float sample_times[POLYNOMIAL_ORDER + 1];
+					double sample_times[POLYNOMIAL_ORDER + 1];
 
-					Vector4_32 value;
+					Vector4_64 value;
 					int32_t sample_index = at_sample_index;
 
 					for (int8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX; control_point_index >= 0; --control_point_index)
@@ -132,7 +132,7 @@ namespace acl
 
 						values[control_point_index] = value;
 						sample_indices[control_point_index] = sample_index;
-						sample_times[control_point_index] = m_duration * float(sample_index) / float(m_num_samples - 1);
+						sample_times[control_point_index] = m_duration * double(sample_index) / double(m_num_samples - 1);
 					}
 
 					sample_index = at_sample_index;
@@ -143,13 +143,15 @@ namespace acl
 
 						values[control_point_index] = value;
 						sample_indices[control_point_index] = sample_index;
-						sample_times[control_point_index] = m_duration * float(sample_index) / float(m_num_samples - 1);
+						sample_times[control_point_index] = m_duration * double(sample_index) / double(m_num_samples - 1);
 					}
 
-					float knots[POLYNOMIAL_ORDER + 1];
+					double knots[POLYNOMIAL_ORDER + 1];
 					calculate_knots(values, sample_indices, knots);
 
-					return interpolate_spline(values, knots, sample_times, m_duration * float(at_sample_index) / float(m_num_samples - 1));
+					Vector4_64 result = interpolate_spline(values, knots, sample_times, m_duration * double(at_sample_index) / double(m_num_samples - 1));
+
+					return result;
 				}
 
 				uint32_t get_num_control_points() const
@@ -175,18 +177,18 @@ namespace acl
 				uint32_t* m_remove;
 				uint32_t m_remove_size;
 
-				Vector4_32 get_left_auxiliary_control_point(int32_t sample_index) const
+				Vector4_64 get_left_auxiliary_control_point(int32_t sample_index) const
 				{
 					// Reflect across the first sample to create an auxiliary control point beyond the clip that will ensure a reasonable interpolation near time 0.
-					return vector_lerp(m_get_sample(0), m_get_sample(-sample_index), -1.0);
+					return vector_lerp(vector_cast(m_get_sample(0)), vector_cast(m_get_sample(-sample_index)), -1.0);
 				}
 
-				Vector4_32 get_right_auxiliary_control_point(int32_t sample_index) const
+				Vector4_64 get_right_auxiliary_control_point(int32_t sample_index) const
 				{
-					return vector_lerp(m_get_sample(2 * (m_num_samples - 1) - sample_index), m_get_sample(m_num_samples - 1), 2.0);
+					return vector_lerp(vector_cast(m_get_sample(2 * (m_num_samples - 1) - sample_index)), vector_cast(m_get_sample(m_num_samples - 1)), 2.0);
 				}
 
-				void find_left_control_point(Vector4_32& out_value, int32_t& out_sample_index) const
+				void find_left_control_point(Vector4_64& out_value, int32_t& out_sample_index) const
 				{
 					while (true)
 					{
@@ -200,13 +202,13 @@ namespace acl
 
 						if (!removed_sample(out_sample_index))
 						{
-							out_value = m_get_sample(out_sample_index);
+							out_value = vector_cast(m_get_sample(out_sample_index));
 							break;
 						}
 					}
 				}
 
-				void find_right_control_point(Vector4_32& out_value, int32_t& out_sample_index) const
+				void find_right_control_point(Vector4_64& out_value, int32_t& out_sample_index) const
 				{
 					ACL_ASSERT(out_sample_index >= 0, "Sample index is out of range");
 
@@ -222,7 +224,7 @@ namespace acl
 
 						if (!removed_sample(out_sample_index))
 						{
-							out_value = m_get_sample(out_sample_index);
+							out_value = vector_cast(m_get_sample(out_sample_index));
 							break;
 						}
 					}
@@ -237,12 +239,12 @@ namespace acl
 				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 				{
 					const BoneStreams& bone = segment.bone_streams[bone_index];
-
+					
 					Quat_32 rotation = rotation_encoders[bone_index] != nullptr ?
-						rotation_encoders[bone_index]->interpolate(sample_index) : bone.get_rotation_sample(sample_index);
+						quat_cast(quat_normalize(vector_to_quat(rotation_encoders[bone_index]->interpolate(sample_index)))) : bone.get_rotation_sample(sample_index);
 
 					Vector4_32 translation = translation_encoders[bone_index] != nullptr ?
-						translation_encoders[bone_index]->interpolate(sample_index) : bone.get_translation_sample(sample_index);
+						vector_cast(translation_encoders[bone_index]->interpolate(sample_index)) : bone.get_translation_sample(sample_index);
 
 					out_local_pose[bone_index] = transform_set(rotation, translation);
 				}
@@ -453,7 +455,7 @@ namespace acl
 						}
 					}
 
-					printf("Sample_index %d has %d rotations and %d translations\n", sample_index, num_rotations, num_translations);
+					//printf("Sample_index %d has %d rotations and %d translations\n", sample_index, num_rotations, num_translations);
 				}
 
 				return animated_data_size;

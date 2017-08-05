@@ -38,9 +38,9 @@ namespace acl
 			constexpr uint32_t POLYNOMIAL_ORDER = 3;
 			constexpr uint32_t FIRST_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
 
-			inline void calculate_knots(const Vector4_32* values, const int32_t* sample_indices, float* out_knots)
+			inline void calculate_knots(const Vector4_64* values, const int32_t* sample_indices, double* out_knots)
 			{
-				out_knots[0] = 0.0f;
+				out_knots[0] = 0.0;
 
 				for (uint8_t i = 1; i < 4; ++i)
 				{
@@ -48,17 +48,17 @@ namespace acl
 					// Avoid this by adding a fifth dimension for "time".
 					int32_t sample_index_difference = sample_indices[i] - sample_indices[i - 1];
 
-					out_knots[i] = out_knots[i - 1] + static_cast<float>(pow(vector_length_squared(vector_sub(values[i], values[i - 1])) + sample_index_difference * sample_index_difference, 0.25));
+					out_knots[i] = out_knots[i - 1] + pow(vector_length_squared(vector_sub(values[i], values[i - 1])) + sample_index_difference * sample_index_difference, 0.25);
 				}
 			}
 
-			inline Vector4_32 interpolate_spline(const Vector4_32* values, const float* knots, const float* sample_times, float sample_time)
+			inline Vector4_64 interpolate_spline(const Vector4_64* values, const double* knots, const double* sample_times, double sample_time)
 			{
-				float knot = knots[1] + (knots[2] - knots[1]) * (sample_time - sample_times[1]) / (sample_times[2] - sample_times[1]);
+				double knot = knots[1] + (knots[2] - knots[1]) * (sample_time - sample_times[1]) / (sample_times[2] - sample_times[1]);
 
 				ACL_ASSERT(knots[1] <= knot && knot <= knots[2], "The knot for the interpolation point is out of bounds");
 
-				Vector4_32 a[] =
+				Vector4_64 a[] =
 				{
 					vector_add(
 						vector_mul(values[0], (knots[1] - knot) / (knots[1] - knots[0])),
@@ -73,7 +73,7 @@ namespace acl
 						vector_mul(values[3], (knot - knots[2]) / (knots[3] - knots[2])))
 				};
 
-				Vector4_32 b[] =
+				Vector4_64 b[] =
 				{
 					vector_add(
 						vector_mul(a[0], (knots[2] - knot) / (knots[2] - knots[0])),
