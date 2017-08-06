@@ -1,3 +1,5 @@
+#define SPLINE 1
+
 ////////////////////////////////////////////////////////////////////////////////
 // The MIT License (MIT)
 //
@@ -264,7 +266,7 @@ static void try_algorithm(const Options& options, Allocator& allocator, const An
 	LARGE_INTEGER end_time_cycles;
 	QueryPerformanceCounter(&end_time_cycles);
 
-#if false
+#if !SPLINE
 	ACL_ENSURE(compressed_clip->is_valid(true), "Compressed clip is invalid");
 
 	void* context = algorithm.allocate_decompression_context(allocator, *compressed_clip);
@@ -341,7 +343,7 @@ int main(int argc, char** argv)
 
 	// Compress & Decompress
 	{
-#if true
+#if SPLINE
 		SplineKeyReductionAlgorithm spline_tests[] =
 		{
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None),

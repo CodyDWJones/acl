@@ -206,6 +206,8 @@ namespace acl
 
 			uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
 
+			printf("Animated data size is %d\n", animated_data_size);
+
 			uint32_t bitset_size = get_bitset_size(num_bones * Constants::NUM_TRACKS_PER_BONE);
 
 			uint32_t buffer_size = 0;
