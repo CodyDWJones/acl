@@ -421,22 +421,23 @@ namespace acl
 					}
 					else
 					{
-						bad_bone_rotations->remove_sample(sample_index);
-						bad_bone_translations->keep_sample(sample_index);
+						bad_bone_rotations->keep_sample(sample_index);
 
 						interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
-						error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
-						if (error >= segment.clip->error_threshold)
+						double error_without_interpolated_rotation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
+
+						if (error_without_interpolated_rotation > segment.clip->error_threshold)
 						{
-							bad_bone_rotations->keep_sample(sample_index);
-							bad_bone_translations->remove_sample(sample_index);
+							bad_bone_rotations->remove_sample(sample_index);
+							bad_bone_translations->keep_sample(sample_index);
 
 							interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
-							error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
-							if (error >= segment.clip->error_threshold)
+							double error_without_interpolated_translation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
+
+							if (error_without_interpolated_translation > error_without_interpolated_rotation)
 							{
 								bad_bone_rotations->keep_sample(sample_index);
-								bad_bone_translations->keep_sample(sample_index);
+								bad_bone_translations->remove_sample(sample_index);
 							}
 						}
 					}
@@ -490,7 +491,7 @@ namespace acl
 				TrackStreamEncoder* modified_rotation_encoder;
 				TrackStreamEncoder* modified_translation_encoder;
 
-				// Try assigning control points sequentially.  Most of the time this will provide the best compression ratio.
+				// Try assigning control points sequentially.  Most of the time this will provide a better compression ratio.
 				reset_control_point_choices(segment, rotation_encoders, translation_encoders);
 
 				for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; ++sample_index)
@@ -512,7 +513,7 @@ namespace acl
 
 				uint32_t size_with_sequential_selection = get_animated_data_size(segment, rotation_encoders, translation_encoders);
 
-				// Now try assigning control points distant from already tried points.
+				// Now try assigning control points more distant from already tried points; occasionally this beats the prior method.
 				reset_control_point_choices(segment, rotation_encoders, translation_encoders);
 
 				uint32_t step = segment.num_clip_samples / 2;
@@ -530,8 +531,6 @@ namespace acl
 				}
 
 				uint32_t size_with_maximally_distant_selection = get_animated_data_size(segment, rotation_encoders, translation_encoders);
-
-				printf("%d vs %d\n", size_with_sequential_selection, size_with_maximally_distant_selection);
 
 				if (size_with_maximally_distant_selection > size_with_sequential_selection)
 				{
