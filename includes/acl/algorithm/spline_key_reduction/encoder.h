@@ -1,5 +1,10 @@
 #pragma once
 
+#define SIXTY_FOUR_BIT 0
+#define LINEAR_SEQUENCE 0
+#define SAMPLE_INDEX_PER_CONTROL_POINT 0
+#define SEPARATE_TRANSLATION_PASS 0
+
 ////////////////////////////////////////////////////////////////////////////////
 // The MIT License (MIT)
 //
@@ -112,6 +117,7 @@ namespace acl
 				void remove_sample(uint32_t sample_index) { bitset_set(m_remove, m_remove_size, sample_index, true); }
 				void keep_sample(uint32_t sample_index) { bitset_set(m_remove, m_remove_size, sample_index, false); }
 
+#if SIXTY_FOUR_BIT
 				Vector4_64 interpolate(int32_t at_sample_index) const
 				{
 					if (!removed_sample(at_sample_index))
@@ -153,6 +159,47 @@ namespace acl
 
 					return result;
 				}
+#else
+				Vector4_32 interpolate(int32_t at_sample_index) const
+				{
+					if (!removed_sample(at_sample_index))
+					{
+						return m_get_sample(at_sample_index);
+					}
+
+					Vector4_32 values[POLYNOMIAL_ORDER + 1];
+					int32_t sample_indices[POLYNOMIAL_ORDER + 1];
+					float sample_times[POLYNOMIAL_ORDER + 1];
+
+					Vector4_32 value;
+					int32_t sample_index = at_sample_index;
+
+					for (int8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX; control_point_index >= 0; --control_point_index)
+					{
+						find_left_control_point(value, sample_index);
+
+						values[control_point_index] = value;
+						sample_indices[control_point_index] = sample_index;
+						sample_times[control_point_index] = m_duration * float(sample_index) / float(m_num_samples - 1);
+					}
+
+					sample_index = at_sample_index;
+
+					for (uint8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX + 1; control_point_index <= POLYNOMIAL_ORDER; ++control_point_index)
+					{
+						find_right_control_point(value, sample_index);
+
+						values[control_point_index] = value;
+						sample_indices[control_point_index] = sample_index;
+						sample_times[control_point_index] = m_duration * float(sample_index) / float(m_num_samples - 1);
+					}
+
+					float knots[POLYNOMIAL_ORDER + 1];
+					calculate_knots(values, sample_indices, knots);
+
+					return interpolate_spline(values, knots, sample_times, m_duration * float(at_sample_index) / float(m_num_samples - 1));
+				}
+#endif
 
 				uint32_t get_num_control_points() const
 				{
@@ -177,6 +224,7 @@ namespace acl
 				uint32_t* m_remove;
 				uint32_t m_remove_size;
 
+#if SIXTY_FOUR_BIT
 				Vector4_64 get_left_auxiliary_control_point(int32_t sample_index) const
 				{
 					// Reflect across the first sample to create an auxiliary control point beyond the clip that will ensure a reasonable interpolation near time 0.
@@ -249,7 +297,203 @@ namespace acl
 					out_local_pose[bone_index] = transform_set(rotation, translation);
 				}
 			}
+#else
+				Vector4_32 get_left_auxiliary_control_point(int32_t sample_index) const
+				{
+					// Reflect across the first sample to create an auxiliary control point beyond the clip that will ensure a reasonable interpolation near time 0.
+					return vector_lerp(m_get_sample(0), m_get_sample(-sample_index), -1.0);
+				}
 
+				Vector4_32 get_right_auxiliary_control_point(int32_t sample_index) const
+				{
+					return vector_lerp(m_get_sample(2 * (m_num_samples - 1) - sample_index), m_get_sample(m_num_samples - 1), 2.0);
+				}
+
+				void find_left_control_point(Vector4_32& out_value, int32_t& out_sample_index) const
+				{
+					while (true)
+					{
+						--out_sample_index;
+
+						if (out_sample_index < 0)
+						{
+							out_value = get_left_auxiliary_control_point(out_sample_index);
+							break;
+						}
+
+						if (!removed_sample(out_sample_index))
+						{
+							out_value = m_get_sample(out_sample_index);
+							break;
+						}
+					}
+				}
+
+				void find_right_control_point(Vector4_32& out_value, int32_t& out_sample_index) const
+				{
+					ACL_ASSERT(out_sample_index >= 0, "Sample index is out of range");
+
+					while (true)
+					{
+						++out_sample_index;
+
+						if (static_cast<uint32_t>(out_sample_index) >= m_num_samples)
+						{
+							out_value = get_right_auxiliary_control_point(out_sample_index);
+							break;
+						}
+
+						if (!removed_sample(out_sample_index))
+						{
+							out_value = m_get_sample(out_sample_index);
+							break;
+						}
+					}
+				}
+			};
+
+			void interpolate_pose(const SegmentContext& segment, TrackStreamEncoder*const* rotation_encoders, TrackStreamEncoder*const* translation_encoders,
+				uint32_t sample_index, Transform_32* out_local_pose)
+			{
+				ACL_ASSERT(0 <= sample_index && sample_index <= INT32_MAX, "sample_index is out of range");
+
+				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+				{
+					const BoneStreams& bone = segment.bone_streams[bone_index];
+
+					Quat_32 rotation = rotation_encoders[bone_index] != nullptr ?
+						quat_normalize(rotation_encoders[bone_index]->interpolate(sample_index)) : bone.get_rotation_sample(sample_index);
+
+					Vector4_32 translation = translation_encoders[bone_index] != nullptr ?
+						translation_encoders[bone_index]->interpolate(sample_index) : bone.get_translation_sample(sample_index);
+
+					out_local_pose[bone_index] = transform_set(rotation, translation);
+				}
+			}
+#endif
+
+#if SEPARATE_TRANSLATION_PASS
+			void choose_samples_to_remove(Allocator& allocator, const RigidSkeleton& skeleton, const SegmentContext& segment,
+				TrackStreamEncoder** rotation_encoders, TrackStreamEncoder** translation_encoders, AnimationTrackType8 track_type_to_remove,
+				float* error_per_bone, BoneTrackError* error_per_stream, Transform_32* raw_local_pose, Transform_32* lossy_local_pose)
+			{
+#if LINEAR_SEQUENCE
+				for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; ++sample_index)
+				{
+#else
+				uint32_t step = segment.num_clip_samples / 2;
+
+				while (step >= 1)
+				{
+					for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; sample_index += step)
+					{
+#endif
+						while (true)
+						{
+							acl::sample_pose(segment.bone_streams, segment.num_bones, sample_index, raw_local_pose, segment.num_bones);
+							interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
+
+							double error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose, error_per_bone);
+
+							if (error <= segment.clip->error_threshold)
+								break;
+
+							double worst_error = 0.0;
+							uint16_t bad_bone_index = INVALID_BONE_INDEX;
+
+							for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+							{
+								//bool is_interpolated =
+								//	track_type_to_remove == AnimationTrackType8::Rotation && rotation_encoders[bone_index] != nullptr && rotation_encoders[bone_index]->removed_sample(sample_index) ||
+								//	track_type_to_remove == AnimationTrackType8::Translation && translation_encoders[bone_index] != nullptr && translation_encoders[bone_index]->removed_sample(sample_index);
+
+								//if (!is_interpolated)
+								//	continue;
+
+								if (error_per_bone[bone_index] > worst_error)
+								{
+									worst_error = error_per_bone[bone_index];
+									bad_bone_index = bone_index;
+								}
+							}
+
+							//ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
+							if (bad_bone_index == INVALID_BONE_INDEX)
+							{
+								printf("ERROR: can't find an interpolated point at sample %d but the error is %f!\n", sample_index, error);
+								break;
+							}
+
+							// Find which bone in the chain contributes the most error that is being interpolated.
+							calculate_skeleton_error_contribution(skeleton, raw_local_pose, lossy_local_pose, bad_bone_index, error_per_stream);
+
+							bad_bone_index = INVALID_BONE_INDEX;
+							double worst_error_contribution = 0.0;
+
+							for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+							{
+								bool is_interpolated;
+								float error_contribution;
+
+								const BoneTrackError& error = error_per_stream[bone_index];
+
+								switch (track_type_to_remove)
+								{
+								case AnimationTrackType8::Rotation:
+									is_interpolated = rotation_encoders[bone_index] != nullptr && rotation_encoders[bone_index]->removed_sample(sample_index);
+									error_contribution = error.rotation;
+									break;
+
+								case AnimationTrackType8::Translation:
+									is_interpolated = translation_encoders[bone_index] != nullptr && translation_encoders[bone_index]->removed_sample(sample_index);
+									error_contribution = error.translation;
+									break;
+								}
+
+								if (!is_interpolated)
+									continue;
+
+								if (error_contribution > worst_error_contribution)
+								{
+									bad_bone_index = bone_index;
+									worst_error_contribution = error_contribution;
+								}
+							}
+
+							//ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
+							if (bad_bone_index == INVALID_BONE_INDEX)
+							{
+								printf("ERROR: can't find an interpolated point at sample %d but the error is %f!\n", sample_index, error);
+								break;
+							}
+
+							//printf("Bone %d contributes %f at sample_index %d\n", bad_bone_index, worst_error_contribution, sample_index);
+
+							TrackStreamEncoder* bad_bone_encoder;
+
+							switch (track_type_to_remove)
+							{
+							case AnimationTrackType8::Rotation:
+								bad_bone_encoder = rotation_encoders[bad_bone_index];
+								break;
+
+							case AnimationTrackType8::Translation:
+								bad_bone_encoder = translation_encoders[bad_bone_index];
+								break;
+							}
+
+							bad_bone_encoder->keep_sample(sample_index);
+						}
+#if LINEAR_SEQUENCE
+					}
+#else
+					}
+
+					step >>= 1;
+				}
+#endif
+			}
+#else
 			void choose_samples_to_remove(Allocator& allocator, const RigidSkeleton& skeleton, const SegmentContext& segment,
 				TrackStreamEncoder** rotation_encoders, TrackStreamEncoder** translation_encoders,
 				float* error_per_bone, BoneTrackError* error_per_stream, Transform_32* raw_local_pose, Transform_32* lossy_local_pose)
@@ -269,129 +513,148 @@ namespace acl
 					}
 				}
 
+#if LINEAR_SEQUENCE
 				for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; ++sample_index)
 				{
-					acl::sample_pose(segment.bone_streams, segment.num_bones, sample_index, raw_local_pose, segment.num_bones);
-					interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
+#else
+				uint32_t step = segment.num_clip_samples / 2;
 
-					double error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose, error_per_bone);
-
-					//printf("Error at %d is %f\n", sample_index, error);
-
-					if (error <= segment.clip->error_threshold)
-						continue;
-
-					double worst_error = 0.0;
-					uint16_t bad_bone_index = INVALID_BONE_INDEX;
-
-					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+				while (step >= 1)
+				{
+					// TODO: use a bitset to skip revisited indices
+					for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; sample_index += step)
 					{
-						if (error_per_bone[bone_index] > worst_error)
-						{
-							worst_error = error_per_bone[bone_index];
-							bad_bone_index = bone_index;
-						}
-					}
+#endif
+						acl::sample_pose(segment.bone_streams, segment.num_bones, sample_index, raw_local_pose, segment.num_bones);
+						interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
 
-					ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
+						double error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose, error_per_bone);
 
-					// Find which bone in the chain contributes the most error that is being interpolated.
-					calculate_skeleton_error_contribution(skeleton, raw_local_pose, lossy_local_pose, bad_bone_index, error_per_stream);
+						//printf("Error at %d is %f\n", sample_index, error);
 
-					bad_bone_index = INVALID_BONE_INDEX;
-					double worst_error_contribution = 0.0;
-
-					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
-					{
-						bool rotation_is_interpolated = rotation_encoders[bone_index] != nullptr && rotation_encoders[bone_index]->removed_sample(sample_index);
-						bool translation_is_interpolated = translation_encoders[bone_index] != nullptr && translation_encoders[bone_index]->removed_sample(sample_index);
-
-						if (!rotation_is_interpolated && !translation_is_interpolated)
+						if (error <= segment.clip->error_threshold)
 							continue;
 
-						const BoneTrackError& error = error_per_stream[bone_index];
+						double worst_error = 0.0;
+						uint16_t bad_bone_index = INVALID_BONE_INDEX;
 
-						if (error.rotation + error.translation > worst_error_contribution)
+						for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 						{
-							bad_bone_index = bone_index;
-							worst_error_contribution = error.rotation + error.translation;
-						}
-					}
-
-					ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
-
-					TrackStreamEncoder* bad_bone_rotations = rotation_encoders[bad_bone_index];
-					TrackStreamEncoder* bad_bone_translations = translation_encoders[bad_bone_index];
-
-					bool old_removed_rotation = bad_bone_rotations != nullptr && bad_bone_rotations->removed_sample(sample_index);
-					bool old_removed_translation = bad_bone_translations != nullptr && bad_bone_translations->removed_sample(sample_index);
-
-					// TODO: try removing all rotation samples first, then all translation samples. It woudl really simplify this function.
-					// So much checking for nullptr...
-
-					if (bad_bone_rotations != nullptr && bad_bone_rotations->removed_sample(sample_index))
-					{
-						if (bad_bone_translations == nullptr || !bad_bone_translations->removed_sample(sample_index))
-						{
-							bad_bone_rotations->keep_sample(sample_index);
-						}
-						else
-						{
-							bad_bone_rotations->keep_sample(sample_index);
-
-							interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
-							double error_without_interpolated_rotation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
-
-							if (error_without_interpolated_rotation > segment.clip->error_threshold)
+							if (error_per_bone[bone_index] > worst_error)
 							{
-								bad_bone_rotations->remove_sample(sample_index);
+								worst_error = error_per_bone[bone_index];
+								bad_bone_index = bone_index;
+							}
+						}
 
-								if (bad_bone_translations != nullptr)
-									bad_bone_translations->keep_sample(sample_index);
+						ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
+
+						// Find which bone in the chain contributes the most error that is being interpolated.
+						calculate_skeleton_error_contribution(skeleton, raw_local_pose, lossy_local_pose, bad_bone_index, error_per_stream);
+
+						bad_bone_index = INVALID_BONE_INDEX;
+						double worst_error_contribution = 0.0;
+
+						for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+						{
+							bool rotation_is_interpolated = rotation_encoders[bone_index] != nullptr && rotation_encoders[bone_index]->removed_sample(sample_index);
+							bool translation_is_interpolated = translation_encoders[bone_index] != nullptr && translation_encoders[bone_index]->removed_sample(sample_index);
+
+							if (!rotation_is_interpolated && !translation_is_interpolated)
+								continue;
+
+							const BoneTrackError& error = error_per_stream[bone_index];
+
+							if (error.rotation + error.translation > worst_error_contribution)
+							{
+								bad_bone_index = bone_index;
+								worst_error_contribution = error.rotation + error.translation;
+							}
+						}
+
+						ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
+
+						TrackStreamEncoder* bad_bone_rotations = rotation_encoders[bad_bone_index];
+						TrackStreamEncoder* bad_bone_translations = translation_encoders[bad_bone_index];
+
+						bool old_removed_rotation = bad_bone_rotations != nullptr && bad_bone_rotations->removed_sample(sample_index);
+						bool old_removed_translation = bad_bone_translations != nullptr && bad_bone_translations->removed_sample(sample_index);
+
+						// TODO: try removing all rotation samples first, then all translation samples. It woudl really simplify this function.
+						// So much checking for nullptr...
+
+						if (bad_bone_rotations != nullptr && bad_bone_rotations->removed_sample(sample_index))
+						{
+							if (bad_bone_translations == nullptr || !bad_bone_translations->removed_sample(sample_index))
+							{
+								bad_bone_rotations->keep_sample(sample_index);
+							}
+							else
+							{
+								bad_bone_rotations->keep_sample(sample_index);
 
 								interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
-								double error_without_interpolated_translation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
+								double error_without_interpolated_rotation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
 
-								if (error_without_interpolated_translation > error_without_interpolated_rotation)
+								if (error_without_interpolated_rotation > segment.clip->error_threshold)
 								{
-									bad_bone_rotations->keep_sample(sample_index);
+									bad_bone_rotations->remove_sample(sample_index);
 
 									if (bad_bone_translations != nullptr)
-										bad_bone_translations->remove_sample(sample_index);
+										bad_bone_translations->keep_sample(sample_index);
+
+									interpolate_pose(segment, rotation_encoders, translation_encoders, sample_index, lossy_local_pose);
+									double error_without_interpolated_translation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
+
+									if (error_without_interpolated_translation > error_without_interpolated_rotation)
+									{
+										bad_bone_rotations->keep_sample(sample_index);
+
+										if (bad_bone_translations != nullptr)
+											bad_bone_translations->remove_sample(sample_index);
+									}
 								}
 							}
 						}
+						else
+						{
+							bad_bone_translations->keep_sample(sample_index);
+						}
+
+						bool changed_rotation = bad_bone_rotations != nullptr && old_removed_rotation != bad_bone_rotations->removed_sample(sample_index);
+						bool changed_translation = bad_bone_translations != nullptr && old_removed_translation != bad_bone_translations->removed_sample(sample_index);
+
+						ACL_ASSERT(changed_rotation || changed_translation, "No changes were made to the bone with the worst error contribution; an infinite loop would have occurred.");
+
+						// Only rewind as far back as is affected by this change.
+						uint8_t num_rotation_points = 0,
+							min_rotation_points = changed_rotation ? POLYNOMIAL_ORDER : 0,
+							num_translation_points = 0,
+							min_translation_points = changed_translation ? POLYNOMIAL_ORDER : 0;
+
+						while (sample_index > 0 &&
+							(num_rotation_points < min_rotation_points || min_rotation_points == 0) &&
+							(num_translation_points <= min_translation_points || min_translation_points == 0))
+						{
+							if (bad_bone_rotations == nullptr || !bad_bone_rotations->removed_sample(sample_index))
+								++num_rotation_points;
+
+							if (bad_bone_translations == nullptr || !bad_bone_translations->removed_sample(sample_index))
+								++num_translation_points;
+
+							--sample_index;
+						}
+
+#if LINEAR_SEQUENCE
 					}
-					else
-					{
-						bad_bone_translations->keep_sample(sample_index);
+#else
 					}
 
-					bool changed_rotation = bad_bone_rotations != nullptr && old_removed_rotation != bad_bone_rotations->removed_sample(sample_index);
-					bool changed_translation = bad_bone_translations != nullptr && old_removed_translation != bad_bone_translations->removed_sample(sample_index);
-
-					ACL_ASSERT(changed_rotation || changed_translation, "No changes were made to the bone with the worst error contribution; an infinite loop would have occurred.");
-
-					// Only rewind as far back as is affected by this change.
-					uint8_t num_rotation_points = 0,
-						min_rotation_points = changed_rotation ? POLYNOMIAL_ORDER : 0,
-						num_translation_points = 0,
-						min_translation_points = changed_translation ? POLYNOMIAL_ORDER : 0;
-
-					while (sample_index > 0 &&
-						(num_rotation_points < min_rotation_points || min_rotation_points == 0) &&
-						(num_translation_points <= min_translation_points || min_translation_points == 0))
-					{
-						if (bad_bone_rotations == nullptr || !bad_bone_rotations->removed_sample(sample_index))
-							++num_rotation_points;
-
-						if (bad_bone_translations == nullptr || !bad_bone_translations->removed_sample(sample_index))
-							++num_translation_points;
-
-						--sample_index;
-					}
+					step >>= 1;
 				}
+#endif
 			}
+#endif	// SEPARATE_TRANSLATION_PASS
 
 			void get_output_sample_index_range(const SegmentContext& segment, int32_t& out_first, int32_t& out_last)
 			{
@@ -399,6 +662,7 @@ namespace acl
 				out_last = (segment.num_clip_samples - 1) + POLYNOMIAL_ORDER - (FIRST_INTERPOLATION_KNOT_INDEX + 1);
 			}
 
+#if SAMPLE_INDEX_PER_CONTROL_POINT
 			uint32_t get_animated_data_size(const SegmentContext& segment, TrackStreamEncoder*const* rotation_encoders, TrackStreamEncoder*const* translation_encoders)
 			{
 				uint32_t animated_data_size = 0;
@@ -461,6 +725,75 @@ namespace acl
 				return animated_data_size;
 			}
 		}
+#else
+			uint32_t get_animated_data_size(const SegmentContext& segment, TrackStreamEncoder*const* rotation_encoders, TrackStreamEncoder*const* translation_encoders)
+			{
+				uint32_t animated_data_size = 0;
+
+				int32_t first_sample_index, last_sample_index;
+				get_output_sample_index_range(segment, first_sample_index, last_sample_index);
+
+				for (int32_t sample_index = first_sample_index; sample_index <= last_sample_index; ++sample_index)
+				{
+					bool add_rotation_frame_header = false;
+					bool add_translation_frame_header = false;
+
+					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+					{
+						const BoneStreams& bone = segment.bone_streams[bone_index];
+
+						const TrackStreamEncoder* rotation_encoder = rotation_encoders[bone_index];
+						if (rotation_encoder != nullptr)
+						{
+							if (sample_index < 0 || sample_index >= segment.num_clip_samples || !rotation_encoder->removed_sample(sample_index))
+							{
+								if (0 <= sample_index && sample_index < segment.num_clip_samples)
+									add_rotation_frame_header = true;
+
+								// Knot
+								animated_data_size += sizeof(float);
+
+								RotationFormat8 format = bone.rotations.get_rotation_format();
+								animated_data_size += get_packed_rotation_size(format);
+							}
+						}
+
+						const TrackStreamEncoder* translation_encoder = translation_encoders[bone_index];
+						if (translation_encoder != nullptr)
+						{
+							if (sample_index < 0 || sample_index >= segment.num_clip_samples || !translation_encoder->removed_sample(sample_index))
+							{
+								if (0 <= sample_index && sample_index < segment.num_clip_samples)
+									add_translation_frame_header = true;
+
+								// Knot
+								animated_data_size += sizeof(float);
+
+								VectorFormat8 format = bone.translations.get_vector_format();
+								animated_data_size += get_packed_vector_size(format);
+							}
+						}
+					}
+
+					if (add_rotation_frame_header)
+					{
+						animated_data_size += sizeof(AnimationTrackType8);
+						animated_data_size += sizeof(sample_index);
+						animated_data_size += get_bitset_size(segment.num_bones);
+					}
+
+					if (add_translation_frame_header)
+					{
+						animated_data_size += sizeof(AnimationTrackType8);
+						animated_data_size += sizeof(sample_index);
+						animated_data_size += get_bitset_size(segment.num_bones);
+					}
+				}
+
+				return animated_data_size;
+			}
+		}
+#endif
 
 		// Encoder entry point
 		inline CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton, const CompressionSettings& settings)
@@ -554,8 +887,42 @@ namespace acl
 					}
 				}
 
+#if SEPARATE_TRANSLATION_PASS
+				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+				{
+					if (segment_rotation_encoders[bone_index] != nullptr)
+					{
+						segment_rotation_encoders[bone_index]->keep_sample(0);
+						segment_rotation_encoders[bone_index]->keep_sample(segment.num_clip_samples - 1);
+					}
+
+					if (segment_translation_encoders[bone_index] != nullptr)
+					{
+						// TODO: could be done more efficiently with a reset
+						for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; ++sample_index)
+							segment_translation_encoders[bone_index]->keep_sample(sample_index);
+					}
+			}
+
+				choose_samples_to_remove(allocator, skeleton, segment, segment_rotation_encoders, segment_translation_encoders, AnimationTrackType8::Rotation,
+					error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose);
+
+				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+				{
+					if (segment_translation_encoders[bone_index] != nullptr)
+					{
+						// TODO: could be done more efficiently with a reset + two calls to keep_sample
+						for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; ++sample_index)
+							segment_translation_encoders[bone_index]->keep_sample(sample_index == 0 || sample_index == segment.num_clip_samples - 1);
+					}
+				}
+
+				choose_samples_to_remove(allocator, skeleton, segment, segment_rotation_encoders, segment_translation_encoders, AnimationTrackType8::Translation,
+					error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose);
+#else
 				choose_samples_to_remove(allocator, skeleton, segment, segment_rotation_encoders, segment_translation_encoders,
 					error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose);
+#endif
 			}
 
 			deallocate_type_array(allocator, error_per_bone, clip_context.num_bones);
