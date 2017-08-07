@@ -35,22 +35,24 @@ namespace acl
 	{
 		namespace impl
 		{
-			// TODO: not in a Constants struct...?
+			// TODO: put in a Constants struct...?
 			constexpr uint32_t POLYNOMIAL_ORDER = 3;
 			constexpr uint32_t FIRST_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
+
+			inline float calculate_next_knot(const Vector4_32& current_value, int32_t current_sample_index, float last_knot, const Vector4_32& last_value, int32_t last_sample_index)
+			{
+				// The interpolation will fail with a division by zero if two consecutive control points happen to be equal.
+				// Avoid this by adding a fifth dimension for "time".
+				int32_t sample_index_difference = current_sample_index - last_sample_index;
+				return last_knot + static_cast<float>(pow(vector_length_squared(vector_sub(current_value, last_value)) + sample_index_difference * sample_index_difference, 0.25));
+			}
 
 			inline void calculate_knots(const Vector4_32* values, const int32_t* sample_indices, float* out_knots)
 			{
 				out_knots[0] = 0.0f;
 
 				for (uint8_t i = 1; i < 4; ++i)
-				{
-					// The interpolation will fail with a division by zero if two consecutive control points happen to be equal.
-					// Avoid this by adding a fifth dimension for "time".
-					int32_t sample_index_difference = sample_indices[i] - sample_indices[i - 1];
-
-					out_knots[i] = out_knots[i - 1] + static_cast<float>(pow(vector_length_squared(vector_sub(values[i], values[i - 1])) + sample_index_difference * sample_index_difference, 0.25));
-				}
+					out_knots[i] = calculate_next_knot(values[i], sample_indices[i], out_knots[i - 1], values[i - 1], sample_indices[i - 1]);
 			}
 
 			inline Vector4_32 interpolate_spline(const Vector4_32* values, const float* knots, const float* sample_times, float sample_time)
