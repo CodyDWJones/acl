@@ -24,6 +24,7 @@
 // SOFTWARE.
 ////////////////////////////////////////////////////////////////////////////////
 
+#include "acl/algorithm/spline_key_reduction/spline.h"
 #include "acl/core/compressed_clip.h"
 #include "acl/core/memory.h"
 #include "acl/core/track_types.h"
@@ -87,6 +88,11 @@ namespace acl
 			constexpr const Header& get_header(const CompressedClip& clip)
 			{
 				return *add_offset_to_ptr<const Header>(&clip, sizeof(CompressedClip));
+			}
+
+			bool use_implicit_frame_header(uint32_t sample_index, uint32_t num_samples)
+			{
+				return sample_index <= NUM_LEFT_AUXILIARY_POINTS || sample_index >= num_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS;
 			}
 		}
 	}

@@ -1,4 +1,4 @@
-#define SPLINE 1
+#define SPLINE 0
 
 ////////////////////////////////////////////////////////////////////////////////
 // The MIT License (MIT)
@@ -354,8 +354,8 @@ int main(int argc, char** argv)
 			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_48, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
@@ -364,8 +364,8 @@ int main(int argc, char** argv)
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_48, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_96, RangeReductionFlags8::None),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_96, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations),
@@ -375,8 +375,8 @@ int main(int argc, char** argv)
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_48, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_48, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_96, RangeReductionFlags8::None),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_96, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations),
@@ -385,9 +385,9 @@ int main(int argc, char** argv)
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_48, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_48, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_32, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_96, RangeReductionFlags8::None),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_96, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations),
@@ -397,8 +397,8 @@ int main(int argc, char** argv)
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_48, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_32, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Translations),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::PerClip | RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
 		};
 
 		for (IAlgorithm& algorithm : spline_tests)
