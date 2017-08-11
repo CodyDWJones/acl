@@ -343,6 +343,12 @@ int main(int argc, char** argv)
 
 	// Compress & Decompress
 	{
+		bool use_segmenting_options[] = { false, true };
+
+		for (size_t segmenting_option_index = 0; segmenting_option_index < sizeof(use_segmenting_options) / sizeof(use_segmenting_options[0]); ++segmenting_option_index)
+		{
+			bool use_segmenting = use_segmenting_options[segmenting_option_index];
+
 #if SPLINE
 		SplineKeyReductionAlgorithm spline_tests[] =
 		{
@@ -404,12 +410,6 @@ int main(int argc, char** argv)
 		for (IAlgorithm& algorithm : spline_tests)
 			try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm);
 #else
-		bool use_segmenting_options[] = { false, true };
-
-		for (size_t segmenting_option_index = 0; segmenting_option_index < sizeof(use_segmenting_options) / sizeof(use_segmenting_options[0]); ++segmenting_option_index)
-		{
-			bool use_segmenting = use_segmenting_options[segmenting_option_index];
-
 			UniformlySampledAlgorithm uniform_tests[] =
 			{
 				UniformlySampledAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
@@ -428,6 +428,7 @@ int main(int argc, char** argv)
 
 			for (IAlgorithm& algorithm : uniform_tests)
 					try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm);
+#endif
 		}
 
 		{

@@ -255,7 +255,7 @@ namespace acl
 			{
 				uint32_t animated_data_size = 0;
 
-				for (uint32_t sample_index = 0; sample_index < segment.num_clip_samples; ++sample_index)
+				for (uint32_t sample_index = 0; sample_index < segment.num_samples; ++sample_index)
 				{
 					uint32_t num_rotation_bits = 0;
 					uint32_t num_translation_bits = 0;
@@ -269,7 +269,7 @@ namespace acl
 						{
 							if (!rotation_encoder->removed_sample(sample_index))
 							{
-								if (num_rotation_bits == 0 && !use_implicit_frame_header(sample_index, segment.num_clip_samples))
+								if (num_rotation_bits == 0 && !use_implicit_frame_header(sample_index, segment.num_samples))
 								{
 									num_rotation_bits += sizeof(uint32_t) * 8;						// Flags and offsets
 									num_rotation_bits += sizeof(uint32_t) * 8;						// Sample index
@@ -296,7 +296,7 @@ namespace acl
 						{
 							if (!translation_encoder->removed_sample(sample_index))
 							{
-								if (num_translation_bits == 0 && !use_implicit_frame_header(sample_index, segment.num_clip_samples))
+								if (num_translation_bits == 0 && !use_implicit_frame_header(sample_index, segment.num_samples))
 								{
 									num_translation_bits += sizeof(uint32_t) * 8;						// Flags and offsets
 									num_translation_bits += sizeof(uint32_t) * 8;						// Sample index
@@ -330,7 +330,7 @@ namespace acl
 			void interpolate_pose(const SegmentContext& segment, TrackStreamEncoder*const* rotation_encoders, TrackStreamEncoder*const* translation_encoders,
 				uint32_t sample_index, Transform_32* out_local_pose)
 			{
-				ACL_ASSERT(NUM_LEFT_AUXILIARY_POINTS <= sample_index && sample_index <= segment.num_clip_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS, "sample_index is out of range");
+				ACL_ASSERT(NUM_LEFT_AUXILIARY_POINTS <= sample_index && sample_index <= segment.num_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS, "sample_index is out of range");
 
 				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 				{
@@ -358,7 +358,7 @@ namespace acl
 						for (uint32_t sample_index = 0; sample_index <= NUM_LEFT_AUXILIARY_POINTS; ++sample_index)
 							rotation_encoder->keep_sample(sample_index);
 
-						for (uint32_t sample_index = segment.num_clip_samples - 1; sample_index >= segment.num_clip_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS; --sample_index)
+						for (uint32_t sample_index = segment.num_samples - 1; sample_index >= segment.num_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS; --sample_index)
 							rotation_encoder->keep_sample(sample_index);
 					}
 
@@ -370,7 +370,7 @@ namespace acl
 						for (uint32_t sample_index = 0; sample_index <= NUM_LEFT_AUXILIARY_POINTS; ++sample_index)
 							translation_encoder->keep_sample(sample_index);
 
-						for (uint32_t sample_index = segment.num_clip_samples - 1; sample_index >= segment.num_clip_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS; --sample_index)
+						for (uint32_t sample_index = segment.num_samples - 1; sample_index >= segment.num_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS; --sample_index)
 							translation_encoder->keep_sample(sample_index);
 					}
 				}
@@ -519,7 +519,7 @@ namespace acl
 				// Try assigning control points sequentially.  Most of the time this will provide a better compression ratio.
 				reset_control_point_choices(segment, rotation_encoders, translation_encoders);
 
-				for (uint32_t sample_index = NUM_LEFT_AUXILIARY_POINTS + 1; sample_index <= segment.num_clip_samples - 1 - (NUM_RIGHT_AUXILIARY_POINTS + 1); ++sample_index)
+				for (uint32_t sample_index = NUM_LEFT_AUXILIARY_POINTS + 1; sample_index <= segment.num_samples - 1 - (NUM_RIGHT_AUXILIARY_POINTS + 1); ++sample_index)
 				{
 					try_control_points_at(allocator, skeleton, segment, sample_index, rotation_encoders, translation_encoders,
 						error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose, modified_rotation_encoder, modified_translation_encoder);
@@ -541,10 +541,10 @@ namespace acl
 				// Now try assigning control points more distant from already tried points; occasionally this beats the prior method.
 				reset_control_point_choices(segment, rotation_encoders, translation_encoders);
 
-				uint32_t step = segment.num_clip_samples / 2;
+				uint32_t step = segment.num_samples / 2;
 				while (step >= 1)
 				{
-					for (uint32_t sample_index = NUM_LEFT_AUXILIARY_POINTS + 1; sample_index <= segment.num_clip_samples - 1 - (NUM_RIGHT_AUXILIARY_POINTS + 1); sample_index += step)
+					for (uint32_t sample_index = NUM_LEFT_AUXILIARY_POINTS + 1; sample_index <= segment.num_samples - 1 - (NUM_RIGHT_AUXILIARY_POINTS + 1); sample_index += step)
 					{
 						try_control_points_at(allocator, skeleton, segment, sample_index, rotation_encoders, translation_encoders,
 							error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose, modified_rotation_encoder, modified_translation_encoder);
@@ -691,7 +691,7 @@ namespace acl
 						const TrackStreamEncoder* rotation_encoder = rotation_encoders[bone_index];
 						if (rotation_encoder != nullptr)
 						{
-							write_animated_track_data(rotation_encoder, first_sample_index, segment.num_clip_samples, control_point_flags_size,
+							write_animated_track_data(rotation_encoder, first_sample_index, segment.num_samples, control_point_flags_size,
 								animated_track_data, rotation_control_points[bone_index], rotation_control_point_flags);
 							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
 						}
@@ -699,7 +699,7 @@ namespace acl
 						const TrackStreamEncoder* translation_encoder = translation_encoders[bone_index];
 						if (translation_encoder != nullptr)
 						{
-							write_animated_track_data(translation_encoder, first_sample_index, segment.num_clip_samples, control_point_flags_size,
+							write_animated_track_data(translation_encoder, first_sample_index, segment.num_samples, control_point_flags_size,
 								animated_track_data, translation_control_points[bone_index], translation_control_point_flags);
 							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
 						}
@@ -790,7 +790,7 @@ namespace acl
 						};
 
 						segment_rotation_encoders[bone_index] = allocate_type<TrackStreamEncoder>(allocator, allocator,
-							segment.num_clip_samples, float(segment.num_clip_samples) / float(clip_context.sample_rate), sampler);
+							segment.num_samples, float(segment.num_samples) / float(clip_context.sample_rate), sampler);
 					}
 
 					if (bone_stream.is_translation_animated())
@@ -801,7 +801,7 @@ namespace acl
 						};
 
 						segment_translation_encoders[bone_index] = allocate_type<TrackStreamEncoder>(allocator, allocator,
-							segment.num_clip_samples, float(segment.num_clip_samples) / float(clip_context.sample_rate), sampler);
+							segment.num_samples, float(segment.num_samples) / float(clip_context.sample_rate), sampler);
 					}
 
 
