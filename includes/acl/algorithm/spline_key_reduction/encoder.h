@@ -36,6 +36,7 @@
 #include "acl/compression/compressed_clip_impl.h"
 #include "acl/compression/skeleton.h"
 #include "acl/compression/animation_clip.h"
+#include "acl/compression/stream/segment_streams.h"
 #include "acl/compression/stream/track_stream.h"
 #include "acl/compression/stream/convert_clip_to_streams.h"
 #include "acl/compression/stream/convert_rotation_streams.h"
@@ -74,17 +75,13 @@ namespace acl
 
 			RangeReductionFlags8 range_reduction;
 
-			CompressionSettings(RotationFormat8 rotation_format, VectorFormat8 translation_format, RangeReductionFlags8 range_reduction)
-				: rotation_format(rotation_format)
-				, translation_format(translation_format)
-				, range_reduction(range_reduction)
-			{
-			}
+			SegmentingSettings segmenting;
 
 			CompressionSettings()
 				: rotation_format(RotationFormat8::Quat_128)
 				, translation_format(VectorFormat8::Vector3_96)
 				, range_reduction(RangeReductionFlags8::None)
+				, segmenting()
 			{}
 		};
 
@@ -214,7 +211,36 @@ namespace acl
 				}
 			};
 
-			void extend_with_auxiliary_control_points(Allocator& allocator, ClipContext& clip_context)
+			// TODO: use this instead of a std::function, which doesn't nicely accept an allocator, and
+			// that allocator support might be deprecated
+			Vector4_32 sample(const BoneStreams& bone_stream, AnimationTrackType8 track_type, int32_t sample_index)
+			{
+				switch (track_type)
+				{
+				case AnimationTrackType8::Rotation:
+					const RotationTrackStream& rotations = bone_stream.rotations;
+
+					if (sample_index < 0)
+					{
+
+					}
+					else if (sample_index >= rotations.get_num_samples())
+					{
+					}
+					else
+					{
+					}
+
+					break;
+				case AnimationTrackType8::Translation:
+					break;
+				default:
+					// ACL assert
+					break;
+				}
+			}
+
+			void extend_clip_with_auxiliary_control_points(Allocator& allocator, ClipContext& clip_context)
 			{
 				for (uint16_t bone_index = 0; bone_index < clip_context.num_bones; ++bone_index)
 				{
@@ -229,7 +255,7 @@ namespace acl
 						// Reflect across the first sample to create an auxiliary control point beyond the clip that will ensure a reasonable interpolation near time 0.
 						for (uint32_t prefix_index = 0; prefix_index < NUM_LEFT_AUXILIARY_POINTS; ++prefix_index)
 							prefixes[prefix_index] = quat_to_vector(quat_normalize(vector_to_quat(
-								vector_lerp(bone_stream.get_rotation_sample(0), bone_stream.get_rotation_sample(prefix_index), -1.0))));
+								vector_lerp(bone_stream.get_rotation_sample(0), bone_stream.get_rotation_sample(NUM_LEFT_AUXILIARY_POINTS - prefix_index), -1.0))));
 
 						for (uint32_t suffix_index = 0; suffix_index < NUM_RIGHT_AUXILIARY_POINTS; ++suffix_index)
 							suffixes[suffix_index] = quat_to_vector(quat_normalize(vector_to_quat(
@@ -241,7 +267,7 @@ namespace acl
 					if (bone_stream.is_translation_animated())
 					{
 						for (uint32_t prefix_index = 0; prefix_index < NUM_LEFT_AUXILIARY_POINTS; ++prefix_index)
-							prefixes[prefix_index] = vector_lerp(bone_stream.get_rotation_sample(0), bone_stream.get_rotation_sample(prefix_index), -1.0);
+							prefixes[prefix_index] = vector_lerp(bone_stream.get_rotation_sample(0), bone_stream.get_rotation_sample(NUM_LEFT_AUXILIARY_POINTS - prefix_index), -1.0);
 
 						for (uint32_t suffix_index = 0; suffix_index < NUM_RIGHT_AUXILIARY_POINTS; ++suffix_index)
 							suffixes[suffix_index] = vector_lerp(bone_stream.get_rotation_sample(clip_context.num_samples - 1 - (suffix_index + 1)), bone_stream.get_rotation_sample(clip_context.num_samples - 1), 2.0);
@@ -249,6 +275,56 @@ namespace acl
 						extend_translation_stream(allocator, bone_stream, prefixes, NUM_LEFT_AUXILIARY_POINTS, suffixes, NUM_RIGHT_AUXILIARY_POINTS);
 					}
 				}
+			}
+
+			void extend_segment_with_auxiliary_control_points(Allocator& allocator, SegmentContext& segment, const ClipContext& raw_clip_context)
+			{
+				bool is_first_segment = segment.clip_sample_offset == 0,
+					is_last_segment = segment.clip_sample_offset + segment.num_samples == segment.clip->num_samples;
+				
+				Vector4_32 prefixes[NUM_LEFT_AUXILIARY_POINTS];
+				uint32_t num_prefixes = 0;
+
+				if (!is_first_segment)
+				{
+					// TODO: can't guarantee the raw clip will have all the samples we need.  Need to read from the previous segment(s), not teh raw clip context.
+					// Then we can guarantee all the aux points we'll need will be there.
+					// In extreme case each segment will be one sample and we'll have to iterate over multiple segments to get the aux points we need.
+
+					for (uint32_t prefix_index = 0; prefix_index < NUM_LEFT_AUXILIARY_POINTS; ++prefix_index)
+					{
+						int32_t sample_index = segment.clip_sample_offset - NUM_LEFT_AUXILIARY_POINTS + prefix_index;
+						prefixes[prefix_index] = sample_index < 0 ?
+
+					}
+				}
+
+				Vector4_32 suffixes[NUM_RIGHT_AUXILIARY_POINTS];
+
+				if (!is_first_segment && !is_last_segment)
+				{
+
+				}
+
+				// If this is the first segment, don't add anything to the beginning; that was handled above.
+
+				// If this is the last segment, don't add anytihng to the end
+
+				// TODO:
+				// Each segment must include an extra sample before the start of the segment, and an extra sample after the end of the segment.
+				// This will ensure the interpolation at the start and end of the segment will have the correct tangent.
+				for (SegmentContext& segment : clip_context.segment_iterator())
+
+
+				{
+					BoneStreams& bone_streams = *segment.bone_streams;
+
+					if (bone_streams.is_rotation_animated)
+					{
+
+					}
+				}
+
 			}
 
 			uint32_t get_animated_data_size(const SegmentContext& segment, TrackStreamEncoder*const* rotation_encoders, TrackStreamEncoder*const* translation_encoders)
@@ -575,6 +651,47 @@ namespace acl
 				deallocate_type_array(allocator, lossy_local_pose, segment.num_bones);
 			}
 
+			inline void write_segment_headers(const ClipContext& clip_context, const CompressionSettings& settings, SegmentHeader* segment_headers, uint16_t segment_headers_start_offset)
+			{
+				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
+
+				uint32_t data_offset = segment_headers_start_offset;
+				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
+				{
+					const SegmentContext& segment = clip_context.segments[segment_index];
+					SegmentHeader& header = segment_headers[segment_index];
+
+					header.num_samples = segment.num_samples;
+					header.animated_pose_bit_size = segment.animated_pose_bit_size;
+					header.format_per_track_data_offset = data_offset;
+					header.track_data_offset = align_to(header.format_per_track_data_offset + format_per_track_data_size, 4);		// Aligned to 4 bytes
+
+					data_offset = header.track_data_offset + segment.animated_data_size;
+				}
+			}
+
+			inline void write_segment_data(const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header)
+			{
+				SegmentHeader* segment_headers = header.get_segment_headers();
+				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
+
+				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
+				{
+					const SegmentContext& segment = clip_context.segments[segment_index];
+					SegmentHeader& segment_header = segment_headers[segment_index];
+
+					if (format_per_track_data_size > 0)
+						write_format_per_track_data(segment.bone_streams, segment.num_bones, header.get_format_per_track_data(segment_header), format_per_track_data_size);
+					else
+						segment_header.format_per_track_data_offset = InvalidPtrOffset();
+
+					if (segment.animated_data_size > 0)
+						write_animated_track_data(segment, settings.rotation_format, settings.translation_format, header.get_track_data(segment_header), segment.animated_data_size);
+					else
+						segment_header.track_data_offset = InvalidPtrOffset();
+				}
+			}
+
 			struct ControlPoint
 			{
 				uint32_t sample_index;
@@ -746,7 +863,7 @@ namespace acl
 			// argument to the compression algorithm that states the units used or we should force centimeters
 			compact_constant_streams(allocator, clip_context, 0.00001f, 0.001f);
 
-			impl::extend_with_auxiliary_control_points(allocator, clip_context);
+			impl::extend_clip_with_auxiliary_control_points(allocator, clip_context);
 
 			uint32_t clip_range_data_size = 0;
 			if (is_enum_flag_set(settings.range_reduction, RangeReductionFlags8::PerClip))
@@ -755,10 +872,14 @@ namespace acl
 				clip_range_data_size = get_stream_range_data_size(clip_context, settings.range_reduction, settings.rotation_format, settings.translation_format);
 			}
 
-			// TODO: If we are segmented, split our streams
-			// Each segment must include an extra sample before the start of the segment, and an extra sample after the end of the segment.
-			// This will ensure the interpolation at the start and end of the segment will have the correct tangent.
-			
+			if (settings.segmenting.enabled)
+			{
+				segment_streams(allocator, clip_context, settings.segmenting);
+
+				for (SegmentContext& segment : clip_context.segment_iterator())
+					impl::extend_segment_with_auxiliary_control_points(allocator, segment, raw_clip_context);
+			}
+
 			quantize_streams(allocator, clip_context, settings.rotation_format, settings.translation_format, clip, skeleton, raw_clip_context);
 
 			uint32_t num_track_stream_encoders = clip_context.num_segments * clip_context.num_bones;
@@ -803,8 +924,6 @@ namespace acl
 						segment_translation_encoders[bone_index] = allocate_type<TrackStreamEncoder>(allocator, allocator,
 							segment.num_samples, float(segment.num_samples) / float(clip_context.sample_rate), sampler);
 					}
-
-
 				}
 
 				choose_control_points(allocator, skeleton, segment, segment_rotation_encoders, segment_translation_encoders);
@@ -813,24 +932,34 @@ namespace acl
 			const SegmentContext& clip_segment = clip_context.segments[0];
 
 			uint32_t constant_data_size = get_constant_data_size(clip_context);
-			uint32_t animated_data_size = get_animated_data_size(clip_segment, rotation_encoders, translation_encoders);		// TODO: run for each segment
+
+			for (SegmentContext& segment : clip_context.segment_iterator())
+				segment.animated_data_size = get_animated_data_size(segment, rotation_encoders, translation_encoders);
 
 			uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
 
 			uint32_t bitset_size = get_bitset_size(num_bones * Constants::NUM_TRACKS_PER_BONE);
 
 			uint32_t buffer_size = 0;
+
+			// Per clip data
 			buffer_size += sizeof(CompressedClip);
-			buffer_size += sizeof(Header);
+			buffer_size += sizeof(ClipHeader);
+			buffer_size += sizeof(SegmentHeader) * clip_context.num_segments;	// Segment headers
 			buffer_size += sizeof(uint32_t) * bitset_size;		// Default tracks bitset
 			buffer_size += sizeof(uint32_t) * bitset_size;		// Constant tracks bitset
 			buffer_size = align_to(buffer_size, 4);				// Align constant track data
 			buffer_size += constant_data_size;					// Constant track data
-			buffer_size += format_per_track_data_size;			// Format per track data
 			buffer_size = align_to(buffer_size, 4);				// Align range data
 			buffer_size += clip_range_data_size;				// Range data
-			buffer_size = align_to(buffer_size, 4);				// Align animated data
-			buffer_size += animated_data_size;					// Animated track data
+
+			// Per segment data
+			for (const SegmentContext& segment : clip_context.segment_iterator())
+			{
+				buffer_size += format_per_track_data_size;			// Format per track data
+				buffer_size = align_to(buffer_size, 4);				// Align animated data
+				buffer_size += segment.animated_data_size;			// Animated track data
+			}
 
 			printf("total size %d\n", buffer_size);
 
@@ -841,18 +970,20 @@ namespace acl
 
 			Header& header = get_header(*compressed_clip);
 			header.num_bones = num_bones;
+			header.num_segments = clip_context.num_segments;
 			header.rotation_format = settings.rotation_format;
 			header.translation_format = settings.translation_format;
 			header.range_reduction = settings.range_reduction;
 			header.num_samples = num_samples;
 			header.sample_rate = clip.get_sample_rate();
-			//header.animated_pose_bit_size = animated_pose_bit_size;
-			header.default_tracks_bitset_offset = sizeof(Header);
+			header.segment_headers_offset = sizeof(FullPrecisionHeader);
+			header.default_tracks_bitset_offset = header.segment_headers_offset + (sizeof(SegmentHeader) * clip_context.num_segments);
 			header.constant_tracks_bitset_offset = header.default_tracks_bitset_offset + (sizeof(uint32_t) * bitset_size);
 			header.constant_track_data_offset = align_to(header.constant_tracks_bitset_offset + (sizeof(uint32_t) * bitset_size), 4);	// Aligned to 4 bytes
-			header.format_per_track_data_offset = header.constant_track_data_offset + constant_data_size;
-			header.clip_range_data_offset = align_to(header.format_per_track_data_offset + format_per_track_data_size, 4);				// Aligned to 4 bytes
-			header.track_data_offset = align_to(header.clip_range_data_offset + clip_range_data_size, 4);								// Aligned to 4 bytes
+			header.clip_range_data_offset = align_to(header.constant_track_data_offset + constant_data_size, 4);						// Aligned to 4 bytes
+
+			uint16_t segment_headers_start_offset = header.clip_range_data_offset + clip_range_data_size;
+			impl::write_segment_headers(clip_context, settings, header.get_segment_headers(), segment_headers_start_offset);
 
 			write_default_track_bitset(clip_context, header.get_default_tracks_bitset(), bitset_size);
 			write_constant_track_bitset(clip_context, header.get_constant_tracks_bitset(), bitset_size);
@@ -862,20 +993,12 @@ namespace acl
 			else
 				header.constant_track_data_offset = InvalidPtrOffset();
 
-			if (format_per_track_data_size > 0)
-				write_format_per_track_data(clip_context, header.get_format_per_track_data(), format_per_track_data_size);
-			else
-				header.format_per_track_data_offset = InvalidPtrOffset();
-
 			if (is_enum_flag_set(settings.range_reduction, RangeReductionFlags8::PerClip))
 				write_range_track_data(clip_segment, settings.range_reduction, settings.rotation_format, settings.translation_format, header.get_clip_range_data(), clip_range_data_size);
 			else
 				header.clip_range_data_offset = InvalidPtrOffset();
 
-			if (animated_data_size > 0)
-				write_animated_track_data(clip_segment, settings.rotation_format, settings.translation_format, header.get_track_data(), animated_data_size);
-			else
-				header.track_data_offset = InvalidPtrOffset();
+			write_segment_data(clip_context, settings, header);
 
 			finalize_compressed_clip(*compressed_clip);
 #endif
@@ -899,11 +1022,11 @@ namespace acl
 #endif
 		}
 
-		void print_stats(const CompressedClip& clip, std::FILE* file)
+		void print_stats(const CompressedClip& clip, std::FILE* file, const CompressionSettings& settings)
 		{
 			using namespace impl;
 
-			const Header& header = get_header(clip);
+			const ClipHeader& header = get_clip_header(clip);
 
 			uint32_t num_tracks = header.num_bones * Constants::NUM_TRACKS_PER_BONE;
 			uint32_t bitset_size = get_bitset_size(num_tracks);
@@ -918,6 +1041,13 @@ namespace acl
 			fprintf(file, "Clip num default tracks: %u\n", num_default_tracks);
 			fprintf(file, "Clip num constant tracks: %u\n", num_constant_tracks);
 			fprintf(file, "Clip num animated tracks: %u\n", num_animated_tracks);
+			fprintf(file, "Clip num segments: %u\n", header.num_segments);
+
+			if (settings.segmenting.enabled)
+			{
+				fprintf(file, "Clip segmenting ideal num samples: %u\n", settings.segmenting.ideal_num_samples);
+				fprintf(file, "Clip segmenting max num samples: %u\n", settings.segmenting.max_num_samples);
+			}
 		}
 	}
 }
