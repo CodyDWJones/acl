@@ -42,25 +42,36 @@ namespace acl
 				static constexpr uint32_t NUM_TRACKS_PER_BONE = 2;
 			};
 
-			struct Header
+			struct SegmentHeader
+			{
+				uint32_t				num_samples;
+				uint32_t				animated_pose_bit_size;						// TODO: Calculate from bitsets and formats?
+
+				PtrOffset32<uint8_t>	format_per_track_data_offset;				// TODO: Make this offset optional? Only present if not variable
+				PtrOffset32<uint8_t>	track_data_offset;
+			};
+
+			struct ClipHeader
 			{
 				uint16_t				num_bones;
+				uint16_t				num_segments;
 				RotationFormat8			rotation_format;
 				VectorFormat8			translation_format;
 				RangeReductionFlags8	range_reduction;
 				uint32_t				num_samples;
 				uint32_t				sample_rate;								// TODO: Store duration as float instead
-				uint32_t				animated_pose_bit_size;						// TODO: Calculate from bitsets and formats?
 
-				PtrOffset16<uint32_t>	default_tracks_bitset_offset;
-				PtrOffset16<uint32_t>	constant_tracks_bitset_offset;
-				PtrOffset16<uint8_t>	constant_track_data_offset;
-				PtrOffset16<uint8_t>	format_per_track_data_offset;				// TODO: Make this offset optional? Only present if not variable
-				PtrOffset16<uint8_t>	clip_range_data_offset;						// TODO: Make this offset optional? Only present if normalized
-				PtrOffset16<uint8_t>	track_data_offset;
+				PtrOffset16<SegmentHeader>	segment_headers_offset;
+				PtrOffset16<uint32_t>		default_tracks_bitset_offset;
+				PtrOffset16<uint32_t>		constant_tracks_bitset_offset;
+				PtrOffset16<uint8_t>		constant_track_data_offset;
+				PtrOffset16<uint8_t>		clip_range_data_offset;					// TODO: Make this offset optional? Only present if normalized
 
 				//////////////////////////////////////////////////////////////////////////
 
+				SegmentHeader*			get_segment_headers() { return segment_headers_offset.add_to(this); }
+				const SegmentHeader*	get_segment_headers() const { return segment_headers_offset.add_to(this); }
+				
 				uint32_t*		get_default_tracks_bitset() { return default_tracks_bitset_offset.add_to(this); }
 				const uint32_t*	get_default_tracks_bitset() const { return default_tracks_bitset_offset.add_to(this); }
 
@@ -70,24 +81,24 @@ namespace acl
 				uint8_t*		get_constant_track_data() { return constant_track_data_offset.safe_add_to(this); }
 				const uint8_t*	get_constant_track_data() const { return constant_track_data_offset.safe_add_to(this); }
 
-				uint8_t*		get_format_per_track_data() { return format_per_track_data_offset.safe_add_to(this); }
-				const uint8_t*	get_format_per_track_data() const { return format_per_track_data_offset.safe_add_to(this); }
+				uint8_t*		get_format_per_track_data(const SegmentHeader& header) { return header.format_per_track_data_offset.safe_add_to(this); }
+				const uint8_t*	get_format_per_track_data(const SegmentHeader& header) const { return header.format_per_track_data_offset.safe_add_to(this); }
 
 				uint8_t*		get_clip_range_data() { return clip_range_data_offset.safe_add_to(this); }
 				const uint8_t*	get_clip_range_data() const { return clip_range_data_offset.safe_add_to(this); }
 
-				uint8_t*		get_track_data() { return track_data_offset.safe_add_to(this); }
-				const uint8_t*	get_track_data() const { return track_data_offset.safe_add_to(this); }
+				uint8_t*		get_track_data(const SegmentHeader& header) { return header.track_data_offset.safe_add_to(this); }
+				const uint8_t*	get_track_data(const SegmentHeader& header) const { return header.track_data_offset.safe_add_to(this); }
 			};
 
-			constexpr Header& get_header(CompressedClip& clip)
+			constexpr ClipHeader& get_clip_header(CompressedClip& clip)
 			{
-				return *add_offset_to_ptr<Header>(&clip, sizeof(CompressedClip));
+				return *add_offset_to_ptr<ClipHeader>(&clip, sizeof(CompressedClip));
 			}
 
-			constexpr const Header& get_header(const CompressedClip& clip)
+			constexpr const ClipHeader& get_clip_header(const CompressedClip& clip)
 			{
-				return *add_offset_to_ptr<const Header>(&clip, sizeof(CompressedClip));
+				return *add_offset_to_ptr<const ClipHeader>(&clip, sizeof(CompressedClip));
 			}
 
 			bool use_implicit_frame_header(uint32_t sample_index, uint32_t num_samples)
