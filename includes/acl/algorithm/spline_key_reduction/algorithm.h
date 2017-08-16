@@ -42,6 +42,8 @@ namespace acl
 			m_compression_settings.translation_format = translation_format;
 			m_compression_settings.range_reduction = range_reduction;
 			m_compression_settings.segmenting.enabled = use_segmenting;
+			m_compression_settings.segmenting.ideal_num_samples = 1024;
+			m_compression_settings.segmenting.max_num_samples = UINT16_MAX;
 		}
 
 		virtual CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton) override
