@@ -35,22 +35,17 @@ namespace acl
 {
 	namespace impl
 	{
-		inline TrackStreamRange extend_stream(const TrackStream& existing_stream, const TrackStreamRange& existing_range, TrackStream& extended_stream,
+		inline void extend_stream(const TrackStream& existing_stream, TrackStream& extended_stream,
 			const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
 		{
 			ACL_ENSURE(existing_stream.get_sample_size() == sizeof(Vector4_32), "Unexpected sample size. %u != %u", stream.get_sample_size(), sizeof(Vector4_32));
 			ACL_ENSURE(existing_stream.get_sample_size() == extended_stream.get_sample_size(), "Mismatched sample size.");
 			ACL_ENSURE(existing_stream.get_num_samples() + num_prefixes + num_suffixes == extended_stream.get_num_samples(), "Target stream is the wrong length.");
 
-			Vector4_32 min = existing_range.get_min();
-			Vector4_32 max = existing_range.get_max();
-
 			for (uint32_t prefix_index = 0; prefix_index < num_prefixes; ++prefix_index)
 			{
 				const Vector4_32& sample = prefixes[prefix_index];
 				extended_stream.set_raw_sample(prefix_index, sample);
-				min = vector_min(min, sample);
-				max = vector_max(max, sample);
 			}
 
 			std::memcpy(extended_stream.get_raw_sample_ptr(num_prefixes), existing_stream.get_raw_sample_ptr(0), existing_stream.get_num_samples() * existing_stream.get_sample_size());
@@ -59,27 +54,51 @@ namespace acl
 			{
 				const Vector4_32& sample = suffixes[suffix_index];
 				extended_stream.set_raw_sample(num_prefixes + existing_stream.get_num_samples() + suffix_index, sample);
+			}
+		}
+
+		inline void extend_range(TrackStreamRange& range, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+		{
+			Vector4_32 min = range.get_min();
+			Vector4_32 max = range.get_max();
+
+			for (uint32_t prefix_index = 0; prefix_index < num_prefixes; ++prefix_index)
+			{
+				const Vector4_32& sample = prefixes[prefix_index];
 				min = vector_min(min, sample);
 				max = vector_max(max, sample);
 			}
 
-			return TrackStreamRange(min, max);
+			for (uint32_t suffix_index = 0; suffix_index < num_suffixes; ++suffix_index)
+			{
+				const Vector4_32& sample = suffixes[suffix_index];
+				min = vector_min(min, sample);
+				max = vector_max(max, sample);
+			}
+
+			range = TrackStreamRange(min, max);
 		}
 	}
 	
-	inline void extend_rotation_stream(Allocator& allocator, BoneStreams& bone_stream, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+	inline void extend_rotation_stream(Allocator& allocator, BoneStreams& bone_streams, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
 	{
-		const RotationTrackStream& r = bone_stream.rotations;
+		const RotationTrackStream& r = bone_streams.rotations;
 		RotationTrackStream extended_rotations(allocator, num_prefixes + r.get_num_samples() + num_suffixes, r.get_sample_size(), r.get_sample_rate(), r.get_rotation_format(), r.get_bit_rate());
-		bone_stream.rotation_range = impl::extend_stream(r, bone_stream.rotation_range, extended_rotations, prefixes, num_prefixes, suffixes, num_suffixes);
-		bone_stream.rotations = std::move(extended_rotations);
+		impl::extend_stream(r, extended_rotations, prefixes, num_prefixes, suffixes, num_suffixes);
+		bone_streams.rotations = std::move(extended_rotations);
+
+		if (bone_ranges != nullptr)
+			impl::extend_range(bone_ranges->rotation, prefixes, num_prefixes, suffixes, num_suffixes);
 	}
 
-	inline void extend_translation_stream(Allocator& allocator, BoneStreams& bone_stream, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+	inline void extend_translation_stream(Allocator& allocator, BoneStreams& bone_streams, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
 	{
-		const TranslationTrackStream& t = bone_stream.translations;
+		const TranslationTrackStream& t = bone_streams.translations;
 		TranslationTrackStream extended_translations(allocator, num_prefixes + t.get_num_samples() + num_suffixes, t.get_sample_size(), t.get_sample_rate(), t.get_vector_format(), t.get_bit_rate());
-		bone_stream.translation_range = impl::extend_stream(t, bone_stream.translation_range, extended_translations, prefixes, num_prefixes, suffixes, num_suffixes);
-		bone_stream.translations = std::move(extended_translations);
+		impl::extend_stream(t, extended_translations, prefixes, num_prefixes, suffixes, num_suffixes);
+		bone_streams.translations = std::move(extended_translations);
+
+		if (bone_ranges != nullptr)
+			impl::extend_range(bone_ranges->translation, prefixes, num_prefixes, suffixes, num_suffixes);
 	}
 }
