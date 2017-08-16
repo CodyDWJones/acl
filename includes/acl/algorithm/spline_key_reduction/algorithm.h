@@ -27,6 +27,7 @@
 #include "acl/algorithm/spline_key_reduction/encoder.h"
 #include "acl/algorithm/spline_key_reduction/decoder.h"
 #include "acl/core/enum_utils.h"
+#include "acl/core/hash.h"
 #include "acl/core/ialgorithm.h"
 #include "acl/core/memory.h"
 #include "acl/decompression/default_output_writer.h"
@@ -36,14 +37,16 @@ namespace acl
 	class SplineKeyReductionAlgorithm final : public IAlgorithm
 	{
 	public:
-		SplineKeyReductionAlgorithm(RotationFormat8 rotation_format, VectorFormat8 translation_format, RangeReductionFlags8 range_reduction, bool use_segmenting)
+		SplineKeyReductionAlgorithm(RotationFormat8 rotation_format, VectorFormat8 translation_format, RangeReductionFlags8 clip_range_reduction, bool use_segmenting = false, RangeReductionFlags8 segment_range_reduction = RangeReductionFlags8::None)
+			: m_compression_settings()
 		{
 			m_compression_settings.rotation_format = rotation_format;
 			m_compression_settings.translation_format = translation_format;
-			m_compression_settings.range_reduction = range_reduction;
+			m_compression_settings.range_reduction = clip_range_reduction;
 			m_compression_settings.segmenting.enabled = use_segmenting;
-			m_compression_settings.segmenting.ideal_num_samples = 1024;
-			m_compression_settings.segmenting.max_num_samples = UINT16_MAX;
+			m_compression_settings.segmenting.range_reduction = segment_range_reduction;
+			m_compression_settings.segmenting.ideal_num_samples = 5;
+			m_compression_settings.segmenting.max_num_samples = 5;
 		}
 
 		virtual CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton) override
@@ -80,6 +83,11 @@ namespace acl
 		virtual void print_stats(const CompressedClip& clip, std::FILE* file) override
 		{
 			spline_key_reduction::print_stats(clip, file, m_compression_settings);
+		}
+
+		virtual uint32_t get_uid() const override
+		{
+			return hash32(&m_compression_settings, sizeof(m_compression_settings));
 		}
 
 	private:
