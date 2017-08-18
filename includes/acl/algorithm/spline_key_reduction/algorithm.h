@@ -45,8 +45,8 @@ namespace acl
 			m_compression_settings.range_reduction = clip_range_reduction;
 			m_compression_settings.segmenting.enabled = use_segmenting;
 			m_compression_settings.segmenting.range_reduction = segment_range_reduction;
-			m_compression_settings.segmenting.ideal_num_samples = 5;
-			m_compression_settings.segmenting.max_num_samples = 5;
+			m_compression_settings.segmenting.ideal_num_samples = 512;
+			m_compression_settings.segmenting.max_num_samples = 512;
 		}
 
 		virtual CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton) override

@@ -296,19 +296,19 @@ namespace acl
 
 	inline void normalize_clip_streams(ClipContext& clip_context, RangeReductionFlags8 range_reduction)
 	{
-		ACL_ENSURE(clip_context.num_segments == 1, "ClipContext must contain a single segment!");
-		SegmentContext& segment = clip_context.segments[0];
-
-		if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Rotations))
+		for (SegmentContext& segment : clip_context.segment_iterator())
 		{
-			normalize_rotation_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
-			clip_context.are_rotations_normalized = true;
-		}
+			if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Rotations))
+			{
+				normalize_rotation_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
+				clip_context.are_rotations_normalized = true;
+			}
 
-		if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Translations))
-		{
-			normalize_translation_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
-			clip_context.are_translations_normalized = true;
+			if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Translations))
+			{
+				normalize_translation_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
+				clip_context.are_translations_normalized = true;
+			}
 		}
 
 		if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Scales))
