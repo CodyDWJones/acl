@@ -35,8 +35,7 @@ namespace acl
 {
 	namespace impl
 	{
-		inline void extend_stream(const TrackStream& existing_stream, TrackStream& extended_stream,
-			const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+		inline void extend_stream(TrackStream& extended_stream, const Vector4_32* prefixes, uint32_t num_prefixes, const TrackStream& existing_stream, const Vector4_32* suffixes, uint32_t num_suffixes)
 		{
 			ACL_ENSURE(existing_stream.get_sample_size() == sizeof(Vector4_32), "Unexpected sample size. %u != %u", stream.get_sample_size(), sizeof(Vector4_32));
 			ACL_ENSURE(existing_stream.get_sample_size() == extended_stream.get_sample_size(), "Mismatched sample size.");
@@ -80,23 +79,21 @@ namespace acl
 		}
 	}
 	
-	inline void extend_rotation_stream(Allocator& allocator, BoneStreams& bone_streams, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+	inline void extend_rotation_stream(Allocator& allocator, RotationTrackStream& stream, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
 	{
-		const RotationTrackStream& r = bone_streams.rotations;
-		RotationTrackStream extended_rotations(allocator, num_prefixes + r.get_num_samples() + num_suffixes, r.get_sample_size(), r.get_sample_rate(), r.get_rotation_format(), r.get_bit_rate());
-		impl::extend_stream(r, extended_rotations, prefixes, num_prefixes, suffixes, num_suffixes);
-		bone_streams.rotations = std::move(extended_rotations);
+		RotationTrackStream extended_stream(allocator, num_prefixes + stream.get_num_samples() + num_suffixes, stream.get_sample_size(), stream.get_sample_rate(), stream.get_rotation_format(), stream.get_bit_rate());
+		impl::extend_stream(extended_stream, prefixes, num_prefixes, stream, suffixes, num_suffixes);
+		stream = std::move(extended_stream);
 
 		if (bone_ranges != nullptr)
 			impl::extend_range(bone_ranges->rotation, prefixes, num_prefixes, suffixes, num_suffixes);
 	}
 
-	inline void extend_translation_stream(Allocator& allocator, BoneStreams& bone_streams, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+	inline void extend_translation_stream(Allocator& allocator, TranslationTrackStream& stream, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
 	{
-		const TranslationTrackStream& t = bone_streams.translations;
-		TranslationTrackStream extended_translations(allocator, num_prefixes + t.get_num_samples() + num_suffixes, t.get_sample_size(), t.get_sample_rate(), t.get_vector_format(), t.get_bit_rate());
-		impl::extend_stream(t, extended_translations, prefixes, num_prefixes, suffixes, num_suffixes);
-		bone_streams.translations = std::move(extended_translations);
+		TranslationTrackStream extended_stream(allocator, num_prefixes + stream.get_num_samples() + num_suffixes, stream.get_sample_size(), stream.get_sample_rate(), stream.get_vector_format(), stream.get_bit_rate());
+		impl::extend_stream(extended_stream, prefixes, num_prefixes, stream, suffixes, num_suffixes);
+		stream = std::move(extended_stream);
 
 		if (bone_ranges != nullptr)
 			impl::extend_range(bone_ranges->translation, prefixes, num_prefixes, suffixes, num_suffixes);

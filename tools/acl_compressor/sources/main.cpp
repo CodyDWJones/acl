@@ -326,7 +326,6 @@ static bool read_clip(Allocator& allocator, const char* filename,
 	return true;
 }
 
-
 int main(int argc, char** argv)
 {
 	Options options;
@@ -343,27 +342,29 @@ int main(int argc, char** argv)
 
 	// Compress & Decompress
 	{
-		bool use_segmenting_options[] = { /*false,*/ true };
+		bool use_segmenting_options[] = { false, true };
 
 		for (size_t segmenting_option_index = 0; segmenting_option_index < sizeof(use_segmenting_options) / sizeof(use_segmenting_options[0]); ++segmenting_option_index)
 		{
 			bool use_segmenting = use_segmenting_options[segmenting_option_index];
 
+			printf("\nUse segmenting: %s\n", use_segmenting ? "yes" : "no");
+
 #if SPLINE
 		SplineKeyReductionAlgorithm spline_tests[] =
 		{
-			//SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
-			//
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
+			
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
 			
 			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Translations, use_segmenting),
-			//SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
+			SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
 		};
 
 		for (IAlgorithm& algorithm : spline_tests)
