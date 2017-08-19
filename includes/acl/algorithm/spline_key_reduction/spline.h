@@ -58,9 +58,9 @@ namespace acl
 					out_knots[i] = calculate_next_knot(values[i], sample_indices[i], out_knots[i - 1], values[i - 1], sample_indices[i - 1]);
 			}
 
-			inline Vector4_32 interpolate_spline(const Vector4_32* values, const float* knots, const float* sample_times, float sample_time)
+			inline Vector4_32 interpolate_spline(const Vector4_32* values, const float* knots, const uint32_t* sample_indices, float sample_index)
 			{
-				float knot = knots[1] + (knots[2] - knots[1]) * (sample_time - sample_times[1]) / (sample_times[2] - sample_times[1]);
+				float knot = knots[1] + (knots[2] - knots[1]) * (sample_index - sample_indices[1]) / (sample_indices[2] - sample_indices[1]);
 
 				ACL_ASSERT(knots[1] <= knot && knot <= knots[2], "The knot for the interpolation point is out of bounds");
 
