@@ -80,6 +80,8 @@ namespace acl
 			return float(m_num_samples - 1) / float(m_sample_rate);
 		}
 
+		virtual uint32_t get_sample_num_packed_bits() const { return 0; }
+
 	protected:
 		TrackStream(AnimationTrackType8 type, TrackFormat8 format) : m_allocator(nullptr), m_samples(nullptr), m_num_samples(0), m_sample_size(0), m_type(type), m_format(format), m_bit_rate(0) {}
 		TrackStream(Allocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, AnimationTrackType8 type, TrackFormat8 format, uint8_t bit_rate)
@@ -181,6 +183,14 @@ namespace acl
 		}
 
 		RotationFormat8 get_rotation_format() const { return m_format.rotation; }
+
+		virtual uint32_t get_sample_num_packed_bits() const override
+		{
+			if (is_bit_rate_variable())
+				return get_num_bits_at_bit_rate(m_bit_rate) * 3;	// 3 components
+			else
+				return get_packed_rotation_size(m_format.rotation) * 8;
+		}
 	};
 
 	class TranslationTrackStream : public TrackStream
@@ -210,6 +220,14 @@ namespace acl
 		}
 
 		VectorFormat8 get_vector_format() const { return m_format.vector; }
+
+		virtual uint32_t get_sample_num_packed_bits() const override
+		{
+			if (is_bit_rate_variable())
+				return get_num_bits_at_bit_rate(m_bit_rate) * 3;	// 3 components
+			else
+				return get_packed_vector_size(m_format.vector) * 8;
+		}
 	};
 
 	// For a rotation track, the extent only tells us if the track is constant or not
