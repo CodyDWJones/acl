@@ -35,7 +35,6 @@ namespace acl
 	{
 		namespace impl
 		{
-			// TODO: put in a Constants struct...?
 			constexpr uint32_t POLYNOMIAL_ORDER = 3;
 
 			constexpr uint32_t FIRST_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;

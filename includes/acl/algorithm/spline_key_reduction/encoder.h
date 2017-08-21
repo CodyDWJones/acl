@@ -58,7 +58,31 @@
 // TODO
 //
 // Data format:
-//    TODO: Detail the format
+// TODO: description of header common to all existing formats
+//
+// For each segment:
+//		TODO: common descriptions
+//
+//		FRAMES:
+//			Each frame contains either rotation, translation, or scale data for a subset of bones at a given sample point.
+//			The header of a frame includes offsets which can be used to linearly seek to a specific point in time.
+//			Although each segment contains control points for effective sample points [-1, 0, N, N+1], in general seeking
+//			requires discovery of previous or future frames because not all the control points needed to interpolate will
+//			be in one frame.
+//
+//   List of frames:
+//		32 bit frame header
+//			+ top two bits - indicates rotation (00) translation (01) or scale (10)
+//			+ 15 bits - multiply by four to get the byte offset to start of previous frame.  0 means this is the first frame.
+//			+ 15 bits - multiply by four to get the offset to start of next frame.  0 means this is the last frame.
+//		uint32_t - sample index this frame's data is for
+//		bitset - one bit per bone, each bit indicates if a spline control point follows for that bone
+//		for each enabled bone:
+//			the packed quaternion or vector
+//		for each enabled bone:
+//			float storing the knot distance from the previous control point for the bone.
+//		padding to meet 4 byte alignment for next frame.
+// 
 //////////////////////////////////////////////////////////////////////////
 
 // TODO: test this encoder with clips that only have 0, 1, 2, or 3 samples per bone.
@@ -534,75 +558,10 @@ namespace acl
 				return animated_data_size;
 			}
 
-			inline void write_segment_headers(const ClipContext& clip_context, const CompressionSettings& settings, SegmentHeader* segment_headers, uint16_t segment_headers_start_offset)
-			{
-				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
-
-				uint32_t data_offset = segment_headers_start_offset;
-				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
-				{
-					const SegmentContext& segment = clip_context.segments[segment_index];
-					SegmentHeader& header = segment_headers[segment_index];
-
-					header.num_samples = segment.num_samples;
-					header.animated_pose_bit_size = segment.animated_pose_bit_size;
-					header.format_per_track_data_offset = data_offset;
-					header.range_data_offset = align_to(header.format_per_track_data_offset + format_per_track_data_size, 2);		// Aligned to 2 bytes
-					header.track_data_offset = align_to(header.range_data_offset + segment.range_data_size, 4);						// Aligned to 4 bytes
-
-					data_offset = header.track_data_offset + segment.animated_data_size;
-				}
-			}
-
-			inline void write_segment_data(const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header)
-			{
-				SegmentHeader* segment_headers = header.get_segment_headers();
-				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
-
-				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
-				{
-					const SegmentContext& segment = clip_context.segments[segment_index];
-					SegmentHeader& segment_header = segment_headers[segment_index];
-
-					if (format_per_track_data_size > 0)
-						write_format_per_track_data(segment.bone_streams, segment.num_bones, header.get_format_per_track_data(segment_header), format_per_track_data_size);
-					else
-						segment_header.format_per_track_data_offset = InvalidPtrOffset();
-
-					if (segment.range_data_size > 0)
-						write_segment_range_data(segment, settings.range_reduction, header.get_segment_range_data(segment_header), segment.range_data_size);
-					else
-						segment_header.range_data_offset = InvalidPtrOffset();
-
-					if (segment.animated_data_size > 0)
-						write_animated_track_data(segment, settings.rotation_format, settings.translation_format, header.get_track_data(segment_header), segment.animated_data_size);
-					else
-						segment_header.track_data_offset = InvalidPtrOffset();
-				}
-			}
-
-			struct ControlPoint
-			{
-				uint32_t sample_index;
-				Vector4_32 value;
-				float knot;
-			};
-
-#if false
+#if false // Work in progress
 			inline void write_animated_track_data(const TrackSteamEncoder& encoder, int32_t first_sample_index, uint32_t num_samples, uint32_t control_point_flags_size,
 				uint8_t* animated_track_data, ControlPoint& out_control_point, uint32_t*& out_control_point_flags)
 			{
-				// Frame format:
-				// 32 bit packed structure:
-				//  top two bits - indicates rotation (00) translation (01) or scale (10)
-				//  15 bits - offset to start of previous frame
-				//  15 bits - offset to start of next frame
-				// uint32_t - sample index
-				// bitset - one bit per bone, each bit indicates if data follows for that bone or not
-				// list of N quats/vectors in appropriate format, possibly packed.
-				// padding to meet 4 byte alignment for next frame.
-				// 
-
 				ControlPoint current = out_control_point;
 				const ControlPoint last = current;
 
@@ -674,43 +633,57 @@ namespace acl
 				out_control_point = current;
 			}
 
-			inline void write_animated_track_data(Allocator& allocator, const SegmentContext& segment, TrackStreamEncoder*const* rotation_encoders, TrackStreamEncoder*const* translation_encoders,
-				uint8_t* animated_track_data, uint32_t animated_data_size)
+			struct ControlPoint
 			{
+				uint32_t sample_index;
+				Vector4_32 value;
+				float knot;
+			};
+
+			inline void write_animated_track_data(Allocator& allocator, const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, uint8_t* animated_track_data, uint32_t animated_data_size)
+			{
+				uint8_t* animated_track_data_begin = animated_track_data;
 				const uint8_t* animated_track_data_end = add_offset_to_ptr<uint8_t>(animated_track_data, animated_data_size);
+
+				uint64_t bit_offset = 0;
 
 				ControlPoint* rotation_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
 				ControlPoint* translation_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
 
 				uint32_t control_point_flags_size = get_bitset_size(segment.num_bones);
 
-				int32_t first_sample_index, last_sample_index;
-				get_output_sample_index_range(segment, first_sample_index, last_sample_index);
-
-				for (int32_t sample_index = first_sample_index; sample_index <= last_sample_index; ++sample_index)
+				for (uint32_t sample_index = 0; sample_index < segment.num_samples; ++sample_index)
 				{
 					uint32_t* rotation_control_point_flags = nullptr;
 					uint32_t* translation_control_point_flags = nullptr;
 
 					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 					{
-						const TrackStreamEncoder* rotation_encoder = rotation_encoders[bone_index];
-						if (rotation_encoder != nullptr)
+						const BoneStreams& bone_stream = segment.bone_streams[bone_index];
+						const Selections* selections;
+
+						selections = rotation_selections[bone_index];
+						if (selections != nullptr)
 						{
-							write_animated_track_data(rotation_encoder, first_sample_index, segment.num_samples, control_point_flags_size,
-								animated_track_data, rotation_control_points[bone_index], rotation_control_point_flags);
+							write_animated_track_data(bone_stream.rotations, sample_index, animated_track_data_begin, animated_track_data, bit_offset,
+								rotation_control_points[bone_index], rotation_control_point_flags);
+
 							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
 						}
 
-						const TrackStreamEncoder* translation_encoder = translation_encoders[bone_index];
-						if (translation_encoder != nullptr)
+						selections = translation_selections[bone_index];
+						if (selections != nullptr)
 						{
-							write_animated_track_data(translation_encoder, first_sample_index, segment.num_samples, control_point_flags_size,
-								animated_track_data, translation_control_points[bone_index], translation_control_point_flags);
+							write_animated_track_data(bone_stream.translations, sample_index, animated_track_data_begin, animated_track_data, bit_offset,
+								translation_control_points[bone_index], translation_control_point_flags);
+
 							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
 						}
 					}
 				}
+
+				if (bit_offset != 0)
+					animated_track_data = animated_track_data_begin + (align_to(bit_offset, 8) / 8);
 
 				ACL_ENSURE(animated_track_data == animated_track_data_end, "Invalid animated track data offset. Wrote too little data.");
 
@@ -718,6 +691,53 @@ namespace acl
 				deallocate_type_array(allocator, translation_control_points, segment.num_bones);
 			}
 #endif
+
+			inline void write_segment_headers(const ClipContext& clip_context, const CompressionSettings& settings, SegmentHeader* segment_headers, uint16_t segment_headers_start_offset)
+			{
+				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
+
+				uint32_t data_offset = segment_headers_start_offset;
+				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
+				{
+					const SegmentContext& segment = clip_context.segments[segment_index];
+					SegmentHeader& header = segment_headers[segment_index];
+
+					header.num_samples = segment.num_samples;
+					header.animated_pose_bit_size = segment.animated_pose_bit_size;
+					header.format_per_track_data_offset = data_offset;
+					header.range_data_offset = align_to(header.format_per_track_data_offset + format_per_track_data_size, 2);		// Aligned to 2 bytes
+					header.track_data_offset = align_to(header.range_data_offset + segment.range_data_size, 4);						// Aligned to 4 bytes
+
+					data_offset = header.track_data_offset + segment.animated_data_size;
+				}
+			}
+
+			inline void write_segment_data(const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header)
+			{
+				SegmentHeader* segment_headers = header.get_segment_headers();
+				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
+
+				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
+				{
+					const SegmentContext& segment = clip_context.segments[segment_index];
+					SegmentHeader& segment_header = segment_headers[segment_index];
+
+					if (format_per_track_data_size > 0)
+						write_format_per_track_data(segment.bone_streams, segment.num_bones, header.get_format_per_track_data(segment_header), format_per_track_data_size);
+					else
+						segment_header.format_per_track_data_offset = InvalidPtrOffset();
+
+					if (segment.range_data_size > 0)
+						write_segment_range_data(segment, settings.range_reduction, header.get_segment_range_data(segment_header), segment.range_data_size);
+					else
+						segment_header.range_data_offset = InvalidPtrOffset();
+
+					if (segment.animated_data_size > 0)
+						write_animated_track_data(segment, settings.rotation_format, settings.translation_format, header.get_track_data(segment_header), segment.animated_data_size);
+					else
+						segment_header.track_data_offset = InvalidPtrOffset();
+				}
+			}
 
 			inline void choose_control_points(Allocator& allocator, const RigidSkeleton& skeleton, const SegmentContext& segment,
 				Selections** rotation_selections, Selections** translation_selections)

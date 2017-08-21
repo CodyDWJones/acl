@@ -294,7 +294,7 @@ namespace acl
 				if (bone_stream.is_rotation_animated() && !is_pack_0_bit_rate(bone_stream.rotations.get_bit_rate()))
 					write_animated_track_data(bone_stream.rotations, sample_index, has_mixed_packing, animated_track_data_begin, animated_track_data, bit_offset);
 
-				if (bone_stream.is_translation_animated() && !is_pack_0_bit_rate(bone_stream.translations.get_bit_rate()))
+				if (bone_stream.is_translation_animated())
 					write_animated_track_data(bone_stream.translations, sample_index, has_mixed_packing, animated_track_data_begin, animated_track_data, bit_offset);
 
 				if (clip_context.has_scale && bone_stream.is_scale_animated() && !is_pack_0_bit_rate(bone_stream.scales.get_bit_rate()))
