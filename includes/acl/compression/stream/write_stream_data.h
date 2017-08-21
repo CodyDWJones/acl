@@ -288,10 +288,10 @@ namespace acl
 			{
 				const BoneStreams& bone_stream = bone_streams[bone_index];
 
-				if (bone_stream.is_rotation_animated() && !is_pack_0_bit_rate(bone_stream.rotations.get_bit_rate()))
+				if (bone_stream.is_rotation_animated())
 					write_animated_track_data(bone_stream.rotations, sample_index, has_mixed_packing, animated_track_data_begin, animated_track_data, bit_offset);
 
-				if (bone_stream.is_translation_animated() && !is_pack_0_bit_rate(bone_stream.translations.get_bit_rate()))
+				if (bone_stream.is_translation_animated())
 					write_animated_track_data(bone_stream.translations, sample_index, has_mixed_packing, animated_track_data_begin, animated_track_data, bit_offset);
 
 				ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
