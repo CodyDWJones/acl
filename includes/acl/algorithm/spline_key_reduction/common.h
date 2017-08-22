@@ -40,6 +40,19 @@ namespace acl
 			struct Constants
 			{
 				static constexpr uint32_t NUM_TRACKS_PER_BONE = 2;
+
+				static constexpr uint32_t LAST_FRAME_LENGTH_LOW_BIT		=  0;
+				static constexpr uint32_t LAST_FRAME_LENGTH_HIGH_BIT	= 14;
+				static constexpr uint32_t FRAME_LENGTH_LOW_BIT			= 15;
+				static constexpr uint32_t FRAME_LENGTH_HIGH_BIT			= 29;
+				static constexpr uint32_t FRAME_TYPE_LOW_BIT			= 30;
+			};
+
+			struct FrameHeader
+			{
+				uint32_t				frame_type_and_offsets;
+				uint32_t				sample_index;
+				uint32_t				bones_having_data[];
 			};
 
 			struct SegmentHeader
