@@ -41,20 +41,20 @@ namespace acl
 			constexpr uint32_t NUM_LEFT_AUXILIARY_POINTS = FIRST_INTERPOLATION_KNOT_INDEX;
 			constexpr uint32_t NUM_RIGHT_AUXILIARY_POINTS = POLYNOMIAL_ORDER - (FIRST_INTERPOLATION_KNOT_INDEX + 1);
 
-			inline float calculate_next_knot(const Vector4_32& current_value, uint32_t current_sample_index, float last_knot, const Vector4_32& last_value, uint32_t last_sample_index)
+			inline float get_knot_delta(const Vector4_32& current_value, uint32_t current_sample_index, const Vector4_32& last_value, uint32_t last_sample_index)
 			{
 				// The interpolation will fail with a division by zero if two consecutive control points happen to be equal.
 				// Avoid this by adding a fifth dimension for "time".
 				uint32_t sample_index_difference = current_sample_index - last_sample_index;
-				return last_knot + static_cast<float>(pow(vector_length_squared(vector_sub(current_value, last_value)) + sample_index_difference * sample_index_difference, 0.25));
+				return static_cast<float>(pow(vector_length_squared(vector_sub(current_value, last_value)) + sample_index_difference * sample_index_difference, 0.25));
 			}
 
-			inline void calculate_knots(const Vector4_32* values, const uint32_t* sample_indices, float* out_knots)
+			inline void get_knots(const Vector4_32* values, const uint32_t* sample_indices, float* out_knots)
 			{
 				out_knots[0] = 0.0f;
 
 				for (uint8_t i = 1; i < 4; ++i)
-					out_knots[i] = calculate_next_knot(values[i], sample_indices[i], out_knots[i - 1], values[i - 1], sample_indices[i - 1]);
+					out_knots[i] = out_knots[i - 1] + get_knot_delta(values[i], sample_indices[i], values[i - 1], sample_indices[i - 1]);
 			}
 
 			inline Vector4_32 interpolate_spline(const Vector4_32* values, const float* knots, const uint32_t* sample_indices, float sample_index)

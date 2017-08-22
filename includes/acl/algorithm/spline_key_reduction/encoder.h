@@ -280,7 +280,7 @@ namespace acl
 				}
 
 				float knots[POLYNOMIAL_ORDER + 1];
-				calculate_knots(values, sample_indices, knots);
+				get_knots(values, sample_indices, knots);
 
 				return interpolate_spline(values, knots, sample_indices, static_cast<float>(at_sample_index));
 			}
@@ -558,127 +558,121 @@ namespace acl
 				return animated_data_size;
 			}
 
-#if false // Work in progress
-			inline void write_animated_track_data(const TrackSteamEncoder& encoder, int32_t first_sample_index, uint32_t num_samples, uint32_t control_point_flags_size,
-				uint8_t* animated_track_data, ControlPoint& out_control_point, uint32_t*& out_control_point_flags)
+			struct ControlPoint
+			{
+				uint32_t sample_index;
+				Vector4_32 value;
+				float knot_delta;
+			};
+
+			inline void write_frame_data(const BoneStreams& bone_streams, const TrackStream& track_stream, AnimationTrackType8 track_type, uint16_t num_bones, uint32_t num_samples,
+				uint32_t sample_index, const Selections& selections, uint8_t* animated_track_data_begin,
+				FrameHeader& out_frame_header, ControlPoint& out_control_point, uint8_t*& out_values, uint64_t& out_values_bit_offset, uint8_t*& out_knots)
 			{
 				ControlPoint current = out_control_point;
 				const ControlPoint last = current;
-
-				if (sample_index == first_sample_index)
+				
+				if (sample_index == 0)
 				{
-					current.sample_index = sample_index;
-					current.value = encoder.get_left_auxiliary_control_point(sample_index);
-					current.knot = 0.0;
+					current.sample_index = 0;
+					current.value = sample(bone_streams, track_type, 0);
+					current.knot_delta = 0.0;
 				}
-				else if (sample_index < 0)
+				else if (selections.is_selected(sample_index))
 				{
 					current.sample_index = sample_index;
-					current.value = encoder.get_left_auxiliary_control_point(sample_index));
-					current.knot = calculate_next_knot(current.value, current.sample_index, last.knot, last.value, last.sample_index);
-				}
-				else if (sample_index >= num_samples)
-				{
-					current.sample_index = sample_index;
-					current.value = encoder.get_right_auxiliary_control_point(sample_index);
-					current.knot = calculate_next_knot(current.value, current.sample_index, last.knot, last.value, last.sample_index);
-				}
-				else if (!encoder.removed_sample(sample_index))
-				{
-					current.sample_index = sample_index;
-					current.value = encoder.get_sample(sample_index);
-					current.knot = calculate_next_knot(current.value, current.sample_index, last.knot, last.value, last.sample_index);
+					current.value = sample(bone_streams, track_type, sample_index);
+					current.knot_delta = get_knot_delta(current.value, current.sample_index, last.value, last.sample_index);
 				}
 
 				if (current.sample_index == sample_index)
 				{
-					if (0 <= sample_index && sample_index < num_samples && out_control_point_flags == nullptr)
-					{
-						AnimationTrackType8 frame_type = AnimationTrackType8::Rotation;
-						memcpy(animated_track_data, &frame_type, sizeof(frame_type));
-						animated_track_data += sizeof(frame_type);
+					bitset_set(out_frame_header.bones_having_data, get_bitset_size(num_bones), bone_streams.bone_index, true);
 
-						memcpy(animated_track_data, &sample_index, sizeof(sample_index));
-						animated_track_data += sizeof(sample_index);
+					write_animated_track_data(track_stream, sample_index, false, animated_track_data_begin, out_values, out_values_bit_offset);
 
-						// TODO: align to 4 bytes here, and in size calculation function
-
-						out_control_point_flags = safe_ptr_cast<uint32_t, uint8_t*>(animated_track_data);
-						animated_track_data += control_point_flags_size;
-
-						bitset_reset(out_control_point_flags, control_point_flags_size, false);
-					}
-
-					if (out_control_point_flags != nullptr)
-						bitset_set(out_control_point_flags, control_point_flags_size, bone_index, true);
-
-					float delta = current.knot - last.knot;
-					memcpy(animated_track_data, &delta, sizeof(delta));
-					animated_track_data += sizeof(delta);
-
-					// TODO: write the quantized auxiliary control point or the true bone stream one
-					// currently this tries to read from out of bounds
-
-					// TODO: use either maximum or configured format for the auxiliary control points -
-					// if variable selected, use max resolution
-					// Does variable mean different rate for each sample, or for the entire bone?
-
-					// TODO: use std::functions here?
-					const uint8_t* rotation_ptr = bone.rotations.get_raw_sample_ptr(sample_index);
-					uint32_t sample_size = bone.rotations.get_sample_size();
-					memcpy(animated_track_data, rotation_ptr, sample_size);
-					animated_track_data += sample_size;
+					memcpy(out_knots, &current.knot_delta, sizeof(current.knot_delta));
+					out_knots += sizeof(current.knot_delta);
 				}
 
 				out_control_point = current;
 			}
 
-			struct ControlPoint
+			inline FrameHeader* write_frame_header(AnimationTrackType8 track_type, uint16_t num_bones, uint32_t sample_index, FrameHeader*& out_previous_frame_header, uint8_t*& out_animated_track_data)
 			{
-				uint32_t sample_index;
-				Vector4_32 value;
-				float knot;
-			};
+				uint32_t bitset_size = get_bitset_size(num_bones);
+
+				FrameHeader* frame_header = safe_ptr_cast<FrameHeader, uint8_t*>(out_animated_track_data);
+				out_animated_track_data += sizeof(FrameHeader) + bitset_size;
+
+				frame_header->frame_type_and_offsets = static_cast<uint32_t>(track_type) << Constants::FRAME_TYPE_LOW_BIT;
+
+				if (out_previous_frame_header != nullptr)
+				{
+					// TODO: need assert somewhere the frame header is aligned to 4 byte
+					uint32_t length = (frame_header - out_previous_frame_header) / 4;
+
+					ACL_ASSERT(length < (1 << (Constants::FRAME_LENGTH_HIGH_BIT - Constants::FRAME_LENGTH_LOW_BIT + 1)), "Frame length is too large to store");
+					out_previous_frame_header->frame_type_and_offsets |= length << Constants::FRAME_LENGTH_LOW_BIT;
+
+					ACL_ASSERT(length < (1 << (Constants::LAST_FRAME_LENGTH_HIGH_BIT - Constants::LAST_FRAME_LENGTH_LOW_BIT + 1)), "Frame offset is too large to store");
+					frame_header->frame_type_and_offsets |= length << Constants::LAST_FRAME_LENGTH_LOW_BIT;
+				}
+
+				out_previous_frame_header = frame_header;
+
+				frame_header->sample_index = sample_index;
+				bitset_reset(frame_header->bones_having_data, bitset_size, false);
+
+				return frame_header;
+			}
 
 			inline void write_animated_track_data(Allocator& allocator, const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, uint8_t* animated_track_data, uint32_t animated_data_size)
 			{
 				uint8_t* animated_track_data_begin = animated_track_data;
 				const uint8_t* animated_track_data_end = add_offset_to_ptr<uint8_t>(animated_track_data, animated_data_size);
-
 				uint64_t bit_offset = 0;
+				FrameHeader* previous_frame_header = nullptr;
 
 				ControlPoint* rotation_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
 				ControlPoint* translation_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
 
-				uint32_t control_point_flags_size = get_bitset_size(segment.num_bones);
-
 				for (uint32_t sample_index = 0; sample_index < segment.num_samples; ++sample_index)
 				{
-					uint32_t* rotation_control_point_flags = nullptr;
-					uint32_t* translation_control_point_flags = nullptr;
+					FrameHeader* frame_header = nullptr;
+
+					// TODO: split our call to get_num_animated_data_bits(bone_streams.rotations); above into its own
+					// function ("get_num_animated_data_bits") that counts up the bits for all bones and the specific anim type;
+					// then it can add the header size if that total is > 0.  And then here, we can compute the pointer to the
+					// knot storage area inside the frame.
 
 					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 					{
-						const BoneStreams& bone_stream = segment.bone_streams[bone_index];
-						const Selections* selections;
+						const Selections* selections = rotation_selections[bone_index];
+						const TrackStream& track_stream = segment.bone_streams[bone_index].rotations;
 
-						selections = rotation_selections[bone_index];
 						if (selections != nullptr)
 						{
-							write_animated_track_data(bone_stream.rotations, sample_index, animated_track_data_begin, animated_track_data, bit_offset,
-								rotation_control_points[bone_index], rotation_control_point_flags);
+							if (frame_header == nullptr)
+								frame_header = write_frame_header(AnimationTrackType8::Rotation, segment.num_bones, sample_index, previous_frame_header, animated_track_data);
+
+							write_frame_data(segment.bone_streams, track_stream, AnimationTrackType8::Rotation, segment.num_bones, track_stream.get_num_samples(), sample_index,
+								*selections, animated_track_data_begin, *frame_header, rotation_control_points[bone_index], animated_track_data, bit_offset, knots);
 
 							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
 						}
+					}
 
-						selections = translation_selections[bone_index];
-						if (selections != nullptr)
-						{
-							write_animated_track_data(bone_stream.translations, sample_index, animated_track_data_begin, animated_track_data, bit_offset,
-								translation_control_points[bone_index], translation_control_point_flags);
+					// TODO: translations. Put above code in a function and reuse?
 
-							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
-						}
+						//selections = translation_selections[bone_index];
+						//if (selections != nullptr)
+						//{
+						//	write_animated_track_data(bone_stream.translations, sample_index, animated_track_data_begin, animated_track_data, bit_offset,
+						//		translation_control_points[bone_index], translation_control_point_flags);
+
+						//	ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
+						//}
 					}
 				}
 
@@ -690,7 +684,6 @@ namespace acl
 				deallocate_type_array(allocator, rotation_control_points, segment.num_bones);
 				deallocate_type_array(allocator, translation_control_points, segment.num_bones);
 			}
-#endif
 
 			inline void write_segment_headers(const ClipContext& clip_context, const CompressionSettings& settings, SegmentHeader* segment_headers, uint16_t segment_headers_start_offset)
 			{
