@@ -116,35 +116,36 @@ namespace acl
 				Selections(Allocator& allocator, uint32_t num_samples)
 					: m_allocator(allocator)
 				{
-					m_remove_size = get_bitset_size(num_samples);
-					m_remove = allocate_type_array<uint32_t>(m_allocator, m_remove_size);
-					m_remove_backup = allocate_type_array<uint32_t>(m_allocator, m_remove_size);
+					m_selected_size = get_bitset_size(num_samples);
+					m_selected = allocate_type_array<uint32_t>(m_allocator, m_selected_size);
+					m_selected_backup = allocate_type_array<uint32_t>(m_allocator, m_selected_size);
 				}
 
 				~Selections()
 				{
-					deallocate_type_array(m_allocator, m_remove, m_remove_size);
-					deallocate_type_array(m_allocator, m_remove_backup, m_remove_size);
+					deallocate_type_array(m_allocator, m_selected, m_selected_size);
+					deallocate_type_array(m_allocator, m_selected_backup, m_selected_size);
 				}
 
-				bool is_selected(uint32_t sample_index) const { return bitset_test(m_remove, m_remove_size, sample_index); }
-				void deselect_all() { bitset_reset(m_remove, m_remove_size, true); }
-				void deselect(uint32_t sample_index) { bitset_set(m_remove, m_remove_size, sample_index, true); }
-				void select(uint32_t sample_index) { bitset_set(m_remove, m_remove_size, sample_index, false); }
+				bool is_selected(uint32_t sample_index) const { return bitset_test(m_selected, m_selected_size, sample_index); }
+				void deselect_all() { bitset_reset(m_selected, m_selected_size, false); }
+				void deselect(uint32_t sample_index) { bitset_set(m_selected, m_selected_size, sample_index, false); }
+				void select(uint32_t sample_index) { bitset_set(m_selected, m_selected_size, sample_index, true); }
 
-				void save_state() { std::memcpy(m_remove_backup, m_remove, m_remove_size * sizeof(uint32_t)); }
-				void restore_state() { std::memcpy(m_remove, m_remove_backup, m_remove_size * sizeof(uint32_t)); }
+				void save_state() { std::memcpy(m_selected_backup, m_selected, m_selected_size * sizeof(uint32_t)); }
+				void restore_state() { std::memcpy(m_selected, m_selected_backup, m_selected_size * sizeof(uint32_t)); }
 
-				uint32_t get_num_selected() const
-				{
-					return bitset_count_set_bits(m_remove, m_remove_size);
-				}
+				// Not currently used...
+				//uint32_t get_num_selected() const
+				//{
+				//	return bitset_count_set_bits(m_selected, m_selected_size);
+				//}
 
 			private:
 				Allocator& m_allocator;
-				uint32_t* m_remove;
-				uint32_t* m_remove_backup;
-				uint32_t m_remove_size;
+				uint32_t* m_selected;
+				uint32_t* m_selected_backup;
+				uint32_t m_selected_size;
 			};
 
 			inline void reset_control_point_choices(Selections& selections, uint32_t num_samples)
@@ -174,6 +175,38 @@ namespace acl
 				}
 			}
 
+			inline uint32_t get_sample_num_packed_bits(const BoneStreams& bone_streams, AnimationTrackType8 track_type)
+			{
+				switch (track_type)
+				{
+				case AnimationTrackType8::Rotation:
+				{
+					const RotationTrackStream& rotations = bone_streams.rotations;
+
+					if (rotations.is_bit_rate_variable())
+						return get_num_bits_at_bit_rate(rotations.get_bit_rate()) * 3;	// 3 components
+					else
+						return get_packed_rotation_size(rotations.get_rotation_format()) * 8;
+				}
+				case AnimationTrackType8::Translation:
+				{
+					const TranslationTrackStream& translations = bone_streams.translations;
+
+					if (translations.is_bit_rate_variable())
+						return get_num_bits_at_bit_rate(translations.get_bit_rate()) * 3;	// 3 components
+					else
+						return get_packed_vector_size(translations.get_vector_format()) * 8;
+				}
+				default:
+					// TODO: assert
+
+					// Asserts are properly handled by the library and can be optionally skipped by the user.
+					// The code found something unexpected but recovered.
+
+					break;
+				}
+			}
+
 			inline Vector4_32 sample(const BoneStreams& bone_streams, AnimationTrackType8 track_type, int32_t sample_index)
 			{
 				switch (track_type)
@@ -186,6 +219,7 @@ namespace acl
 					{
 						int32_t right_index = std::min(-sample_index, num_samples - 1);
 
+						// Reflect across the first sample to create an auxiliary control point beyond the clip that will ensure a reasonable interpolation near time 0.
 						return quat_to_vector(quat_normalize(vector_to_quat(
 							vector_lerp(get_rotation_sample(bone_streams, 0), get_rotation_sample(bone_streams, right_index), -1.0))));
 					}
@@ -228,13 +262,17 @@ namespace acl
 				}
 				default:
 					// TODO: assert
+
+					// Asserts are properly handled by the library and can be optionally skipped by the user.
+					// The code found something unexpected but recovered.
+
 					break;
 				}
 			}
 
 			Vector4_32 interpolate(const BoneStreams& bone_streams, AnimationTrackType8 track_type, const Selections& selections, uint32_t at_sample_index)
 			{
-				if (!selections.is_selected(at_sample_index))
+				if (selections.is_selected(at_sample_index))
 				{
 					return sample(bone_streams, track_type, at_sample_index);
 				}
@@ -250,7 +288,7 @@ namespace acl
 					while (true)
 					{
 						--sample_index;
-						if (!selections.is_selected(sample_index))
+						if (selections.is_selected(sample_index))
 						{
 							value = sample(bone_streams, track_type, sample_index);
 							break;
@@ -268,7 +306,7 @@ namespace acl
 					while (true)
 					{
 						++sample_index;
-						if (!selections.is_selected(sample_index))
+						if (selections.is_selected(sample_index))
 						{
 							value = sample(bone_streams, track_type, sample_index);
 							break;
@@ -320,7 +358,6 @@ namespace acl
 			inline void get_auxiliary_control_points(uint32_t segment_clip_sample_offset, uint32_t num_samples, const BoneStreams& raw_bone_streams, AnimationTrackType8 track_type,
 				Vector4_32* out_prefixes, uint32_t& out_num_prefixes, Vector4_32* out_suffixes, uint32_t& out_num_suffixes)
 			{
-				// Reflect across the first sample to create an auxiliary control point beyond the clip that will ensure a reasonable interpolation near time 0.
 				for (out_num_prefixes = 0; out_num_prefixes < NUM_LEFT_AUXILIARY_POINTS; ++out_num_prefixes)
 				{
 					out_prefixes[out_num_prefixes] = sample(raw_bone_streams, track_type, static_cast<int32_t>(segment_clip_sample_offset) - NUM_LEFT_AUXILIARY_POINTS + out_num_prefixes);
@@ -414,8 +451,8 @@ namespace acl
 
 				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 				{
-					bool rotation_is_interpolated = rotation_selections[bone_index] != nullptr && rotation_selections[bone_index]->is_selected(sample_index);
-					bool translation_is_interpolated = translation_selections[bone_index] != nullptr && translation_selections[bone_index]->is_selected(sample_index);
+					bool rotation_is_interpolated = rotation_selections[bone_index] != nullptr && !rotation_selections[bone_index]->is_selected(sample_index);
+					bool translation_is_interpolated = translation_selections[bone_index] != nullptr && !translation_selections[bone_index]->is_selected(sample_index);
 
 					if (!rotation_is_interpolated && !translation_is_interpolated)
 						continue;
@@ -432,14 +469,14 @@ namespace acl
 				ACL_ASSERT(bad_bone_index != INVALID_BONE_INDEX, "Failed to find the bone with the worst error");
 
 				Selections* bad_bone_rotations = rotation_selections[bad_bone_index];
-				bool old_removed_rotation = bad_bone_rotations != nullptr && bad_bone_rotations->is_selected(sample_index);
+				bool rotation_was_selected = bad_bone_rotations != nullptr && bad_bone_rotations->is_selected(sample_index);
 
 				Selections* bad_bone_translations = translation_selections[bad_bone_index];
-				bool old_removed_translation = bad_bone_translations != nullptr && bad_bone_translations->is_selected(sample_index);
+				bool translation_was_selected = bad_bone_translations != nullptr && bad_bone_translations->is_selected(sample_index);
 
-				if (bad_bone_rotations != nullptr && bad_bone_rotations->is_selected(sample_index))
+				if (bad_bone_rotations != nullptr && !bad_bone_rotations->is_selected(sample_index))
 				{
-					if (bad_bone_translations == nullptr || !bad_bone_translations->is_selected(sample_index))
+					if (bad_bone_translations == nullptr || bad_bone_translations->is_selected(sample_index))
 					{
 						bad_bone_rotations->select(sample_index);
 					}
@@ -471,10 +508,10 @@ namespace acl
 					bad_bone_translations->select(sample_index);
 				}
 
-				bool changed_rotation = bad_bone_rotations != nullptr && old_removed_rotation != bad_bone_rotations->is_selected(sample_index);
+				bool changed_rotation = bad_bone_rotations != nullptr && rotation_was_selected != bad_bone_rotations->is_selected(sample_index);
 				out_modified_rotation_selections = changed_rotation ? bad_bone_rotations : nullptr;
 
-				bool changed_translation = bad_bone_translations != nullptr && old_removed_translation != bad_bone_translations->is_selected(sample_index);
+				bool changed_translation = bad_bone_translations != nullptr && translation_was_selected != bad_bone_translations->is_selected(sample_index);
 				out_modified_translation_selections = changed_translation ? bad_bone_translations : nullptr;
 
 				ACL_ASSERT(changed_rotation || changed_translation, "No changes were made to the bone with the worst error contribution");
@@ -494,27 +531,38 @@ namespace acl
 					(num_rotation_points < min_rotation_points || min_rotation_points == 0) &&
 					(num_translation_points <= min_translation_points || min_translation_points == 0))
 				{
-					if (modified_rotation_selections != nullptr && !modified_rotation_selections->is_selected(out_sample_index))
+					if (modified_rotation_selections != nullptr && modified_rotation_selections->is_selected(out_sample_index))
 						++num_rotation_points;
 
-					if (modified_translation_selections != nullptr && !modified_translation_selections->is_selected(out_sample_index))
+					if (modified_translation_selections != nullptr && modified_translation_selections->is_selected(out_sample_index))
 						++num_translation_points;
 
 					--out_sample_index;
 				}
 			}
 
-			inline uint32_t get_num_frame_header_bits(uint32_t num_bones)
+			inline uint32_t get_frame_header_size(uint32_t num_bones)
 			{
-				return sizeof(uint32_t) * 8						// Flags and offsets
-					+ sizeof(uint32_t) * 8						// Sample index
-					+ get_bitset_size(num_bones) * 8;
+				return sizeof(FrameHeader) + get_bitset_size(num_bones) * sizeof(uint32_t);
 			}
 
-			inline uint32_t get_num_animated_data_bits(const TrackStream& track_stream)
+			inline uint32_t get_frame_data_size(const SegmentContext& segment, Selections*const* selections, AnimationTrackType8 track_type, uint32_t sample_index, bool count_knots)
 			{
-				return track_stream.get_sample_num_packed_bits()
-					+ sizeof(float) * 8;						// Knot
+				uint32_t num_bits = 0;
+
+				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
+				{
+					if (selections[bone_index] != nullptr && selections[bone_index]->is_selected(sample_index))
+					{
+						const BoneStreams& bone_streams = segment.bone_streams[bone_index];
+						num_bits += get_sample_num_packed_bits(bone_streams, track_type);
+
+						if (count_knots)
+							num_bits += sizeof(float) * 8;
+					}
+				}
+
+				return (num_bits + (num_bits % 32)) / 8;
 			}
 
 			inline uint32_t get_animated_data_size(const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections)
@@ -523,39 +571,47 @@ namespace acl
 
 				for (uint32_t sample_index = 0; sample_index < segment.num_samples; ++sample_index)
 				{
-					uint32_t num_rotation_bits = 0;
-					uint32_t num_translation_bits = 0;
+					uint32_t data_size = get_frame_data_size(segment, rotation_selections, AnimationTrackType8::Rotation, sample_index, true);
+					if (data_size > 0)
+						animated_data_size += get_frame_header_size(segment.num_bones) + data_size;
 
-					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
-					{
-						const BoneStreams& bone_streams = segment.bone_streams[bone_index];
-						const Selections* selections;
-
-						selections = rotation_selections[bone_index];
-						if (selections != nullptr && !selections->is_selected(sample_index))
-						{
-							if (num_rotation_bits == 0 && !use_implicit_frame_header(sample_index, segment.num_samples))
-								num_rotation_bits += get_num_frame_header_bits(segment.num_bones);
-
-							num_rotation_bits += get_num_animated_data_bits(bone_streams.rotations);
-						}
-
-						selections = translation_selections[bone_index];
-						if (selections != nullptr && !selections->is_selected(sample_index))
-						{
-							if (num_translation_bits == 0 && !use_implicit_frame_header(sample_index, segment.num_samples))
-								num_translation_bits += get_num_frame_header_bits(segment.num_bones);
-
-							num_rotation_bits += get_num_animated_data_bits(bone_streams.translations);
-						}
-					}
-
-					num_rotation_bits += num_rotation_bits % 32;
-					num_translation_bits += num_translation_bits % 32;
-					animated_data_size += num_rotation_bits / 8 + num_translation_bits / 8;
+					data_size = get_frame_data_size(segment, translation_selections, AnimationTrackType8::Translation, sample_index, true);
+					if (data_size > 0)
+						animated_data_size += get_frame_header_size(segment.num_bones) + data_size;
 				}
 
 				return animated_data_size;
+			}
+
+			inline FrameHeader* write_frame_header(AnimationTrackType8 track_type, uint16_t num_bones, uint32_t sample_index, uint8_t* animated_track_data_begin,
+				FrameHeader*& out_previous_frame_header, uint8_t*& out_animated_track_data, uint64_t& out_bit_offset)
+			{
+				uint32_t bitset_size = get_bitset_size(num_bones);
+
+				FrameHeader* frame_header = safe_ptr_cast<FrameHeader, uint8_t*>(out_animated_track_data);
+				out_animated_track_data += sizeof(FrameHeader) + bitset_size * sizeof(uint32_t);
+				out_bit_offset = (out_animated_track_data - animated_track_data_begin) * 8;
+
+				frame_header->frame_type_and_offsets = static_cast<uint32_t>(track_type) << Constants::FRAME_TYPE_LOW_BIT;
+
+				if (out_previous_frame_header != nullptr)
+				{
+					size_t length = (reinterpret_cast<uintptr_t>(frame_header) - reinterpret_cast<uintptr_t>(out_previous_frame_header)) / 4;
+					ACL_ENSURE(add_offset_to_ptr<FrameHeader>(out_previous_frame_header, 4 * length) == frame_header, "A frame is not 4-byte aligned");
+
+					ACL_ENSURE(length < (1 << (Constants::FRAME_LENGTH_HIGH_BIT - Constants::FRAME_LENGTH_LOW_BIT + 1)), "Frame length is too large to store");
+					out_previous_frame_header->frame_type_and_offsets |= length << Constants::FRAME_LENGTH_LOW_BIT;
+
+					ACL_ENSURE(length < (1 << (Constants::LAST_FRAME_LENGTH_HIGH_BIT - Constants::LAST_FRAME_LENGTH_LOW_BIT + 1)), "Frame offset is too large to store");
+					frame_header->frame_type_and_offsets |= length << Constants::LAST_FRAME_LENGTH_LOW_BIT;
+				}
+
+				out_previous_frame_header = frame_header;
+
+				frame_header->sample_index = sample_index;
+				bitset_reset(frame_header->bones_having_data, bitset_size, false);
+
+				return frame_header;
 			}
 
 			struct ControlPoint
@@ -565,13 +621,13 @@ namespace acl
 				float knot_delta;
 			};
 
-			inline void write_frame_data(const BoneStreams& bone_streams, const TrackStream& track_stream, AnimationTrackType8 track_type, uint16_t num_bones, uint32_t num_samples,
+			inline void write_frame_bone_data(const BoneStreams& bone_streams, const TrackStream& track_stream, AnimationTrackType8 track_type, uint16_t num_bones, uint32_t num_samples,
 				uint32_t sample_index, const Selections& selections, uint8_t* animated_track_data_begin,
-				FrameHeader& out_frame_header, ControlPoint& out_control_point, uint8_t*& out_values, uint64_t& out_values_bit_offset, uint8_t*& out_knots)
+				FrameHeader& out_frame_header, ControlPoint& out_control_point, uint8_t*& out_values, uint64_t& out_values_bit_offset, float*& out_knots)
 			{
 				ControlPoint current = out_control_point;
 				const ControlPoint last = current;
-				
+
 				if (sample_index == 0)
 				{
 					current.sample_index = 0;
@@ -588,43 +644,47 @@ namespace acl
 				if (current.sample_index == sample_index)
 				{
 					bitset_set(out_frame_header.bones_having_data, get_bitset_size(num_bones), bone_streams.bone_index, true);
-
 					write_animated_track_data(track_stream, sample_index, false, animated_track_data_begin, out_values, out_values_bit_offset);
-
-					memcpy(out_knots, &current.knot_delta, sizeof(current.knot_delta));
-					out_knots += sizeof(current.knot_delta);
+					*out_knots++ = current.knot_delta;
 				}
 
 				out_control_point = current;
 			}
 
-			inline FrameHeader* write_frame_header(AnimationTrackType8 track_type, uint16_t num_bones, uint32_t sample_index, FrameHeader*& out_previous_frame_header, uint8_t*& out_animated_track_data)
+			inline void write_frame(const SegmentContext& segment, AnimationTrackType8 track_type, Selections*const* sample_selections, uint32_t sample_index, uint8_t* animated_track_data_begin, const uint8_t* animated_track_data_end,
+				FrameHeader*& out_previous_frame_header, uint8_t*& out_animated_track_data, uint64_t& out_bit_offset, ControlPoint* out_control_points)
 			{
-				uint32_t bitset_size = get_bitset_size(num_bones);
+				FrameHeader* frame_header = nullptr;
+				float* knots = nullptr;
 
-				FrameHeader* frame_header = safe_ptr_cast<FrameHeader, uint8_t*>(out_animated_track_data);
-				out_animated_track_data += sizeof(FrameHeader) + bitset_size;
-
-				frame_header->frame_type_and_offsets = static_cast<uint32_t>(track_type) << Constants::FRAME_TYPE_LOW_BIT;
-
-				if (out_previous_frame_header != nullptr)
+				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
 				{
-					// TODO: need assert somewhere the frame header is aligned to 4 byte
-					uint32_t length = (frame_header - out_previous_frame_header) / 4;
+					const Selections* selections = sample_selections[bone_index];
+					if (selections != nullptr && selections->is_selected(sample_index))
+					{
+						const BoneStreams& bone_streams = segment.bone_streams[bone_index];
+						const TrackStream& track_stream = bone_streams.get_track_stream(track_type);
 
-					ACL_ASSERT(length < (1 << (Constants::FRAME_LENGTH_HIGH_BIT - Constants::FRAME_LENGTH_LOW_BIT + 1)), "Frame length is too large to store");
-					out_previous_frame_header->frame_type_and_offsets |= length << Constants::FRAME_LENGTH_LOW_BIT;
+						if (frame_header == nullptr)
+						{
+							frame_header = write_frame_header(track_type, segment.num_bones, sample_index, animated_track_data_begin, out_previous_frame_header, out_animated_track_data, out_bit_offset);
 
-					ACL_ASSERT(length < (1 << (Constants::LAST_FRAME_LENGTH_HIGH_BIT - Constants::LAST_FRAME_LENGTH_LOW_BIT + 1)), "Frame offset is too large to store");
-					frame_header->frame_type_and_offsets |= length << Constants::LAST_FRAME_LENGTH_LOW_BIT;
+							uint32_t frame_samples_size = get_frame_data_size(segment, sample_selections, track_type, sample_index, false);
+							knots = safe_ptr_cast<float, uint8_t*>(out_animated_track_data + frame_samples_size);
+						}
+
+						write_frame_bone_data(bone_streams, track_stream, track_type, segment.num_bones, track_stream.get_num_samples(), sample_index,
+							*selections, animated_track_data_begin, *frame_header, out_control_points[bone_index], out_animated_track_data, out_bit_offset, knots);
+
+						ACL_ENSURE(out_animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
+					}
 				}
 
-				out_previous_frame_header = frame_header;
-
-				frame_header->sample_index = sample_index;
-				bitset_reset(frame_header->bones_having_data, bitset_size, false);
-
-				return frame_header;
+				if (knots != nullptr)
+				{
+					out_animated_track_data = safe_ptr_cast<uint8_t, float*>(knots);
+					out_bit_offset = (out_animated_track_data - animated_track_data_begin) * 8;
+				}
 			}
 
 			inline void write_animated_track_data(Allocator& allocator, const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, uint8_t* animated_track_data, uint32_t animated_data_size)
@@ -639,41 +699,8 @@ namespace acl
 
 				for (uint32_t sample_index = 0; sample_index < segment.num_samples; ++sample_index)
 				{
-					FrameHeader* frame_header = nullptr;
-
-					// TODO: split our call to get_num_animated_data_bits(bone_streams.rotations); above into its own
-					// function ("get_num_animated_data_bits") that counts up the bits for all bones and the specific anim type;
-					// then it can add the header size if that total is > 0.  And then here, we can compute the pointer to the
-					// knot storage area inside the frame.
-
-					for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
-					{
-						const Selections* selections = rotation_selections[bone_index];
-						const TrackStream& track_stream = segment.bone_streams[bone_index].rotations;
-
-						if (selections != nullptr)
-						{
-							if (frame_header == nullptr)
-								frame_header = write_frame_header(AnimationTrackType8::Rotation, segment.num_bones, sample_index, previous_frame_header, animated_track_data);
-
-							write_frame_data(segment.bone_streams, track_stream, AnimationTrackType8::Rotation, segment.num_bones, track_stream.get_num_samples(), sample_index,
-								*selections, animated_track_data_begin, *frame_header, rotation_control_points[bone_index], animated_track_data, bit_offset, knots);
-
-							ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
-						}
-					}
-
-					// TODO: translations. Put above code in a function and reuse?
-
-						//selections = translation_selections[bone_index];
-						//if (selections != nullptr)
-						//{
-						//	write_animated_track_data(bone_stream.translations, sample_index, animated_track_data_begin, animated_track_data, bit_offset,
-						//		translation_control_points[bone_index], translation_control_point_flags);
-
-						//	ACL_ENSURE(animated_track_data <= animated_track_data_end, "Invalid animated track data offset. Wrote too much data.");
-						//}
-					}
+					write_frame(segment, AnimationTrackType8::Rotation, rotation_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, rotation_control_points);
+					write_frame(segment, AnimationTrackType8::Translation, translation_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, translation_control_points);
 				}
 
 				if (bit_offset != 0)
@@ -685,6 +712,7 @@ namespace acl
 				deallocate_type_array(allocator, translation_control_points, segment.num_bones);
 			}
 
+			// TODO: merge all instances to write_stream_data.h
 			inline void write_segment_headers(const ClipContext& clip_context, const CompressionSettings& settings, SegmentHeader* segment_headers, uint16_t segment_headers_start_offset)
 			{
 				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
@@ -705,7 +733,8 @@ namespace acl
 				}
 			}
 
-			inline void write_segment_data(const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header)
+			// TODO: merge all instances to write_stream_data.h.  Add a lambda parameter so caller can override writing of animated data.
+			inline void write_segment_data(Allocator& allocator, const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header, Selections*const* rotation_selections, Selections*const* translation_selections)
 			{
 				SegmentHeader* segment_headers = header.get_segment_headers();
 				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
@@ -726,7 +755,7 @@ namespace acl
 						segment_header.range_data_offset = InvalidPtrOffset();
 
 					if (segment.animated_data_size > 0)
-						write_animated_track_data(segment, settings.rotation_format, settings.translation_format, header.get_track_data(segment_header), segment.animated_data_size);
+						write_animated_track_data(allocator, segment, rotation_selections, translation_selections, header.get_track_data(segment_header), segment.animated_data_size);
 					else
 						segment_header.track_data_offset = InvalidPtrOffset();
 				}
@@ -943,12 +972,11 @@ namespace acl
 
 			printf("total size %d\n", buffer_size);
 
-#if false
 			uint8_t* buffer = allocate_type_array_aligned<uint8_t>(allocator, buffer_size, 16);
 
 			CompressedClip* compressed_clip = make_compressed_clip(buffer, buffer_size, AlgorithmType8::UniformlySampled);
 
-			Header& header = get_header(*compressed_clip);
+			ClipHeader& header = get_clip_header(*compressed_clip);
 			header.num_bones = num_bones;
 			header.num_segments = clip_context.num_segments;
 			header.rotation_format = settings.rotation_format;
@@ -957,7 +985,7 @@ namespace acl
 			header.segment_range_reduction = settings.segmenting.range_reduction;
 			header.num_samples = num_samples;
 			header.sample_rate = clip.get_sample_rate();
-			header.segment_headers_offset = sizeof(FullPrecisionHeader);
+			header.segment_headers_offset = sizeof(ClipHeader);
 			header.default_tracks_bitset_offset = header.segment_headers_offset + (sizeof(SegmentHeader) * clip_context.num_segments);
 			header.constant_tracks_bitset_offset = header.default_tracks_bitset_offset + (sizeof(uint32_t) * bitset_size);
 			header.constant_track_data_offset = align_to(header.constant_tracks_bitset_offset + (sizeof(uint32_t) * bitset_size), 4);	// Aligned to 4 bytes
@@ -979,10 +1007,9 @@ namespace acl
 			else
 				header.clip_range_data_offset = InvalidPtrOffset();
 
-			write_segment_data(clip_context, settings, header);
+			write_segment_data(allocator, clip_context, settings, header, rotation_selections, translation_selections);
 
 			finalize_compressed_clip(*compressed_clip);
-#endif
 
 			for (uint32_t selections_index = 0; selections_index < num_selections; ++selections_index)
 			{
@@ -996,11 +1023,7 @@ namespace acl
 			destroy_clip_context(allocator, clip_context);
 			destroy_clip_context(allocator, raw_clip_context);
 
-#if false
 			return compressed_clip;
-#else
-			return nullptr;
-#endif
 		}
 
 		void print_stats(const CompressedClip& clip, std::FILE* file, const CompressionSettings& settings)
