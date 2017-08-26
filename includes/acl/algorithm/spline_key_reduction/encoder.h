@@ -926,10 +926,10 @@ namespace acl
 				{
 					const BoneStreams& bone_streams = segment.bone_streams[bone_index];
 
-					if (bone_streams.is_rotation_animated())
+					if (bone_streams.is_rotation_animated() && !is_pack_0_bit_rate(bone_streams.rotations.get_bit_rate()))
 						segment_rotation_selections[bone_index] = allocate_type<Selections>(allocator, allocator, segment.num_samples);
 					
-					if (bone_streams.is_translation_animated())
+					if (bone_streams.is_translation_animated() && !is_pack_0_bit_rate(bone_streams.translations.get_bit_rate()))
 						segment_translation_selections[bone_index] = allocate_type<Selections>(allocator, allocator, segment.num_samples);
 				}
 
