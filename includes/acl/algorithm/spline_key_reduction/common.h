@@ -50,9 +50,10 @@ namespace acl
 
 			struct FrameHeader
 			{
+				// TODO: reallocate a bit to indicate that all bones have data, in which case bones_having_data[] will have zero elements.
 				uint32_t				frame_type_and_offsets;
 				uint32_t				sample_index;
-				uint32_t				bones_having_data[];
+				uint32_t				bones_having_data[];						// TODO: change to be [1] instead and adjust the sizeof computation
 			};
 
 			struct SegmentHeader
@@ -118,11 +119,6 @@ namespace acl
 			constexpr const ClipHeader& get_clip_header(const CompressedClip& clip)
 			{
 				return *add_offset_to_ptr<const ClipHeader>(&clip, sizeof(CompressedClip));
-			}
-
-			bool use_implicit_frame_header(uint32_t sample_index, uint32_t num_samples)
-			{
-				return sample_index <= NUM_LEFT_AUXILIARY_POINTS || sample_index >= num_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS;
 			}
 		}
 	}

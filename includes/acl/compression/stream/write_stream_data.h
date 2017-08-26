@@ -225,6 +225,8 @@ namespace acl
 			uint8_t bit_rate = track_stream.get_bit_rate();
 			uint64_t num_bits_at_bit_rate = get_num_bits_at_bit_rate(bit_rate) * 3;	// 3 components
 
+			// TODO: I broke something here, but don't understand yet why.
+
 			// Track is constant, our constant sample is stored in the range information
 			ACL_ENSURE(!is_pack_0_bit_rate(bit_rate), "Cannot write constant variable track data");
 			const uint8_t* raw_sample_ptr = track_stream.get_raw_sample_ptr(sample_index);
