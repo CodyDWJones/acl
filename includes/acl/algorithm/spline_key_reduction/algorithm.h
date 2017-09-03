@@ -27,7 +27,6 @@
 #include "acl/algorithm/spline_key_reduction/encoder.h"
 #include "acl/algorithm/spline_key_reduction/decoder.h"
 #include "acl/core/enum_utils.h"
-#include "acl/core/hash.h"
 #include "acl/core/ialgorithm.h"
 #include "acl/core/memory.h"
 #include "acl/decompression/default_output_writer.h"
@@ -49,9 +48,13 @@ namespace acl
 			m_compression_settings.segmenting.max_num_samples = 512;
 		}
 
-		virtual CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton) override
+		SplineKeyReductionAlgorithm(spline_key_reduction::CompressionSettings settings)
+			: m_compression_settings(settings)
+		{}
+
+		virtual CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton, OutputStats& stats) override
 		{
-			return spline_key_reduction::compress_clip(allocator, clip, skeleton, m_compression_settings);
+			return spline_key_reduction::compress_clip(allocator, clip, skeleton, m_compression_settings, stats);
 		}
 
 		virtual void* allocate_decompression_context(Allocator& allocator, const CompressedClip& clip) override
@@ -80,14 +83,9 @@ namespace acl
 			//spline_key_reduction::decompress_bone(compression_settings, clip, context, sample_time, sample_bone_index, out_rotation, out_translation);
 		}
 
-		virtual void print_stats(const CompressedClip& clip, std::FILE* file) override
-		{
-			spline_key_reduction::print_stats(clip, file, m_compression_settings);
-		}
-
 		virtual uint32_t get_uid() const override
 		{
-			return hash32(&m_compression_settings, sizeof(m_compression_settings));
+			return m_compression_settings.hash();
 		}
 
 	private:

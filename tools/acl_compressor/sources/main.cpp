@@ -30,6 +30,7 @@
 #include "acl/compression/skeleton_error_metric.h"
 #include "acl/sjson/sjson_writer.h"
 
+#include "acl/algorithm/spline_key_reduction/algorithm.h"
 #include "acl/algorithm/uniformly_sampled/algorithm.h"
 
 #include <conio.h>
@@ -284,6 +285,26 @@ static int main_impl(int argc, char** argv)
 		{
 			bool use_segmenting = use_segmenting_options[segmenting_option_index];
 
+#if SPLINE
+			SplineKeyReductionAlgorithm spline_tests[] =
+			{
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
+				
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
+				
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Translations, use_segmenting),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
+			};
+
+			for (IAlgorithm& algorithm : spline_tests)
+				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm, logging, runs_writer);
+#else
 			UniformlySampledAlgorithm uniform_tests[] =
 			{
 				UniformlySampledAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
@@ -304,9 +325,27 @@ static int main_impl(int argc, char** argv)
 
 			for (IAlgorithm& algorithm : uniform_tests)
 				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm, logging, runs_writer);
+#endif
 		}
 
 		{
+#if SPLINE
+			SplineKeyReductionAlgorithm spline_tests[] =
+			{
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, true, RangeReductionFlags8::Rotations),
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, true, RangeReductionFlags8::Translations),
+				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, true, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+				
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, true, RangeReductionFlags8::Rotations),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, true, RangeReductionFlags8::Translations),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, true, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Translations, true, RangeReductionFlags8::Translations),
+				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, true, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations),
+			};
+
+			for (IAlgorithm& algorithm : spline_tests)
+				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm, logging, runs_writer);
+#else
 			UniformlySampledAlgorithm uniform_tests[] =
 			{
 				UniformlySampledAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, true, RangeReductionFlags8::Rotations),
@@ -322,8 +361,9 @@ static int main_impl(int argc, char** argv)
 				UniformlySampledAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations | RangeReductionFlags8::Scales, true, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations | RangeReductionFlags8::Scales),
 			};
 
-			for (UniformlySampledAlgorithm& algorithm : uniform_tests)
+			for (IAlgorithm& algorithm : uniform_tests)
 				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm, logging, runs_writer);
+#endif
 		}
 	};
 

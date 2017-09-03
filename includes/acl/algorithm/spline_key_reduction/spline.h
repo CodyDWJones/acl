@@ -36,6 +36,7 @@ namespace acl
 		namespace impl
 		{
 			constexpr uint32_t POLYNOMIAL_ORDER = 3;
+			constexpr uint32_t NUM_CONTROL_POINTS = POLYNOMIAL_ORDER + 1;
 
 			constexpr uint32_t FIRST_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
 			constexpr uint32_t NUM_LEFT_AUXILIARY_POINTS = FIRST_INTERPOLATION_KNOT_INDEX;

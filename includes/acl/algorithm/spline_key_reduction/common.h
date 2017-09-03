@@ -56,10 +56,11 @@ namespace acl
 				uint32_t				bones_having_data[];						// TODO: change to be [1] instead and adjust the sizeof computation
 			};
 
+			// TODO: merge with uniformly sampled's and put in a common place.
+			// I think all formats will have a common header, potentially followed by custom data.
 			struct SegmentHeader
 			{
 				uint32_t				num_samples;
-				uint32_t				animated_pose_bit_size;						// TODO: Calculate from bitsets and formats?
 
 				// TODO: Only need one offset, calculate the others from the information we have?
 				PtrOffset32<uint8_t>	format_per_track_data_offset;				// TODO: Make this offset optional? Only present if variable
@@ -67,6 +68,8 @@ namespace acl
 				PtrOffset32<uint8_t>	track_data_offset;
 			};
 
+			// TODO: merge with uniformly sampled's and put in a common place.
+			// I think all formats will have a common header, potentially followed by custom data.
 			struct ClipHeader
 			{
 				uint16_t				num_bones;

@@ -25,17 +25,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO: minimize the includes.
-#include "acl/core/memory.h"
-#include "acl/core/error.h"
+#include "acl/core/algorithm_types.h"
 #include "acl/core/bitset.h"
 #include "acl/core/enum_utils.h"
-#include "acl/core/algorithm_types.h"
+#include "acl/core/error.h"
+#include "acl/core/hash.h"
+#include "acl/core/memory.h"
+#include "acl/core/scope_profiler.h"
 #include "acl/core/track_types.h"
 #include "acl/algorithm/spline_key_reduction/common.h"
 #include "acl/algorithm/spline_key_reduction/spline.h"
 #include "acl/compression/compressed_clip_impl.h"
 #include "acl/compression/skeleton.h"
 #include "acl/compression/animation_clip.h"
+#include "acl/compression/output_stats.h"
 #include "acl/compression/stream/segment_streams.h"
 #include "acl/compression/stream/track_stream.h"
 #include "acl/compression/stream/convert_rotation_streams.h"
@@ -106,6 +109,11 @@ namespace acl
 				, range_reduction(RangeReductionFlags8::None)
 				, segmenting()
 			{}
+
+			uint32_t hash() const
+			{
+				return hash32(rotation_format) ^ hash32(translation_format) ^ hash32(range_reduction) ^ segmenting.hash();
+			}
 		};
 
 		namespace impl
@@ -277,8 +285,8 @@ namespace acl
 					return sample(bone_streams, track_type, at_sample_index);
 				}
 
-				Vector4_32 values[POLYNOMIAL_ORDER + 1];
-				uint32_t sample_indices[POLYNOMIAL_ORDER + 1];
+				Vector4_32 values[NUM_CONTROL_POINTS];
+				uint32_t sample_indices[NUM_CONTROL_POINTS];
 
 				Vector4_32 value;
 				uint32_t sample_index = at_sample_index;
@@ -301,7 +309,7 @@ namespace acl
 
 				sample_index = at_sample_index;
 
-				for (uint8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX + 1; control_point_index <= POLYNOMIAL_ORDER; ++control_point_index)
+				for (uint8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX + 1; control_point_index < NUM_CONTROL_POINTS; ++control_point_index)
 				{
 					while (true)
 					{
@@ -317,7 +325,7 @@ namespace acl
 					sample_indices[control_point_index] = sample_index;
 				}
 
-				float knots[POLYNOMIAL_ORDER + 1];
+				float knots[NUM_CONTROL_POINTS];
 				get_knots(values, sample_indices, knots);
 
 				return interpolate_spline(values, knots, sample_indices, static_cast<float>(at_sample_index));
@@ -367,7 +375,7 @@ namespace acl
 
 				while (true)
 				{
-					if (out_num_suffixes >= NUM_RIGHT_AUXILIARY_POINTS && out_num_prefixes + num_samples + out_num_suffixes >= POLYNOMIAL_ORDER + 1)
+					if (out_num_suffixes >= NUM_RIGHT_AUXILIARY_POINTS && out_num_prefixes + num_samples + out_num_suffixes >= NUM_CONTROL_POINTS)
 						break;
 
 					out_suffixes[out_num_suffixes] = sample(raw_bone_streams, track_type, segment_clip_sample_offset + num_samples + out_num_suffixes);
@@ -391,7 +399,7 @@ namespace acl
 					Vector4_32 prefixes[NUM_LEFT_AUXILIARY_POINTS];
 					uint32_t num_prefixes;
 
-					Vector4_32 suffixes[POLYNOMIAL_ORDER];
+					Vector4_32 suffixes[NUM_CONTROL_POINTS - 1];
 					uint32_t num_suffixes;
 
 					if (bone_streams.is_rotation_animated())
@@ -523,9 +531,9 @@ namespace acl
 					return;
 
 				uint32_t num_rotation_points = 0,
-					min_rotation_points = modified_rotation_selections == nullptr ? 0 : POLYNOMIAL_ORDER,
+					min_rotation_points = modified_rotation_selections == nullptr ? 0 : NUM_CONTROL_POINTS - 1,
 					num_translation_points = 0,
-					min_translation_points = modified_translation_selections == nullptr ? 0 : POLYNOMIAL_ORDER;
+					min_translation_points = modified_translation_selections == nullptr ? 0 : NUM_CONTROL_POINTS - 1;
 
 				while (out_sample_index > NUM_LEFT_AUXILIARY_POINTS + 1 &&
 					(num_rotation_points < min_rotation_points || min_rotation_points == 0) &&
@@ -724,7 +732,6 @@ namespace acl
 					SegmentHeader& header = segment_headers[segment_index];
 
 					header.num_samples = segment.num_samples;
-					header.animated_pose_bit_size = segment.animated_pose_bit_size;
 					header.format_per_track_data_offset = data_offset;
 					header.range_data_offset = align_to(header.format_per_track_data_offset + format_per_track_data_size, 2);		// Aligned to 2 bytes
 					header.track_data_offset = align_to(header.range_data_offset + segment.range_data_size, 4);						// Aligned to 4 bytes
@@ -833,9 +840,11 @@ namespace acl
 		}
 
 		// Encoder entry point
-		inline CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton, const CompressionSettings& settings)
+		inline CompressedClip* compress_clip(Allocator& allocator, const AnimationClip& clip, const RigidSkeleton& skeleton, const CompressionSettings& settings, OutputStats& stats)
 		{
 			using namespace impl;
+
+			ScopeProfiler compression_time;
 
 			uint16_t num_bones = clip.get_num_bones();
 			uint32_t num_samples = clip.get_num_samples();
@@ -860,10 +869,10 @@ namespace acl
 			}
 
 			ClipContext raw_clip_context;
-			initialize_clip_context(allocator, clip, raw_clip_context);
+			initialize_clip_context(allocator, clip, skeleton, raw_clip_context);
 
 			ClipContext clip_context;
-			initialize_clip_context(allocator, clip, clip_context);
+			initialize_clip_context(allocator, clip, skeleton, clip_context);
 
 			convert_rotation_streams(allocator, clip_context, settings.rotation_format);
 
@@ -928,7 +937,7 @@ namespace acl
 
 					if (bone_streams.is_rotation_animated() && !is_pack_0_bit_rate(bone_streams.rotations.get_bit_rate()))
 						segment_rotation_selections[bone_index] = allocate_type<Selections>(allocator, allocator, segment.num_samples);
-					
+
 					if (bone_streams.is_translation_animated() && !is_pack_0_bit_rate(bone_streams.translations.get_bit_rate()))
 						segment_translation_selections[bone_index] = allocate_type<Selections>(allocator, allocator, segment.num_samples);
 				}
@@ -945,7 +954,8 @@ namespace acl
 
 			uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
 
-			uint32_t bitset_size = get_bitset_size(num_bones * Constants::NUM_TRACKS_PER_BONE);
+			uint32_t num_tracks = num_bones * Constants::NUM_TRACKS_PER_BONE;
+			uint32_t bitset_size = get_bitset_size(num_tracks);
 
 			uint32_t buffer_size = 0;
 
@@ -1020,39 +1030,85 @@ namespace acl
 			deallocate_type_array(allocator, rotation_selections, num_selections);
 			deallocate_type_array(allocator, translation_selections, num_selections);
 
+			compression_time.stop();
+
+#if false
+			// TODO: I don't think the encoder should be responsible for writing "diagnostic" data like this.
+			// It can't be split out into general code as is, though, because the decoder is needed.
+			// Make an attempt though!  If print_stats() was moved...
+
+			if (stats.get_logging() != StatLogging::None)
+			{
+				uint32_t raw_size = clip.get_total_size();
+				uint32_t compressed_size = compressed_clip->get_size();
+				double compression_ratio = double(raw_size) / double(compressed_size);
+
+				uint32_t num_default_tracks = bitset_count_set_bits(header.get_default_tracks_bitset(), bitset_size);
+				uint32_t num_constant_tracks = bitset_count_set_bits(header.get_constant_tracks_bitset(), bitset_size);
+				uint32_t num_animated_tracks = num_tracks - num_default_tracks - num_constant_tracks;
+
+				auto alloc_ctx_fun = [&](Allocator& allocator)
+				{
+					DecompressionSettings settings;
+					return allocate_decompression_context(allocator, settings, *compressed_clip);
+				};
+
+				auto free_ctx_fun = [&](Allocator& allocator, void* context)
+				{
+					deallocate_decompression_context(allocator, context);
+				};
+
+				auto sample_fun = [&](void* context, float sample_time, Transform_32* out_transforms, uint16_t num_transforms)
+				{
+					DecompressionSettings settings;
+					DefaultOutputWriter writer(out_transforms, num_transforms);
+					decompress_pose(settings, *compressed_clip, context, sample_time, writer);
+				};
+
+				// Use the compressed clip to make sure the decoder works properly
+				BoneError error = calculate_compressed_clip_error(allocator, clip, skeleton, alloc_ctx_fun, free_ctx_fun, sample_fun);
+
+				SJSONObjectWriter& writer = stats.get_writer();
+				writer["algorithm_name"] = get_algorithm_name(AlgorithmType8::SplineKeyReduction);
+				writer["algorithm_uid"] = settings.hash();
+				writer["raw_size"] = raw_size;
+				writer["compressed_size"] = compressed_size;
+				writer["compression_ratio"] = compression_ratio;
+				writer["max_error"] = error.error;
+				writer["worst_bone"] = error.index;
+				writer["worst_time"] = error.sample_time;
+				writer["compression_time"] = cycles_to_seconds(compression_time.get_elapsed_cycles());
+				writer["duration"] = clip.get_duration();
+				writer["num_samples"] = clip.get_num_samples();
+				writer["rotation_format"] = get_rotation_format_name(settings.rotation_format);
+				writer["translation_format"] = get_vector_format_name(settings.translation_format);
+				writer["range_reduction"] = get_range_reduction_name(settings.range_reduction);
+
+				if (stats.get_logging() == StatLogging::Detailed)
+				{
+					writer["num_bones"] = clip.get_num_bones();
+					writer["num_default_tracks"] = num_default_tracks;
+					writer["num_constant_tracks"] = num_constant_tracks;
+					writer["num_animated_tracks"] = num_animated_tracks;
+				}
+
+				if (settings.segmenting.enabled)
+				{
+					writer["segmenting"] = [&](SJSONObjectWriter& writer)
+					{
+						writer["num_segments"] = header.num_segments;
+						writer["range_reduction"] = get_range_reduction_name(settings.segmenting.range_reduction);
+						writer["ideal_num_samples"] = settings.segmenting.ideal_num_samples;
+						writer["max_num_samples"] = settings.segmenting.max_num_samples;
+					};
+				}
+			}
+#endif
+
 			destroy_clip_context(allocator, clip_context);
 			destroy_clip_context(allocator, raw_clip_context);
 
 			return compressed_clip;
-		}
-
-		void print_stats(const CompressedClip& clip, std::FILE* file, const CompressionSettings& settings)
-		{
-			using namespace impl;
-
-			const ClipHeader& header = get_clip_header(clip);
-
-			uint32_t num_tracks = header.num_bones * Constants::NUM_TRACKS_PER_BONE;
-			uint32_t bitset_size = get_bitset_size(num_tracks);
-
-			uint32_t num_default_tracks = bitset_count_set_bits(header.get_default_tracks_bitset(), bitset_size);
-			uint32_t num_constant_tracks = bitset_count_set_bits(header.get_constant_tracks_bitset(), bitset_size);
-			uint32_t num_animated_tracks = num_tracks - num_default_tracks - num_constant_tracks;
-
-			fprintf(file, "Clip rotation format: %s\n", get_rotation_format_name(header.rotation_format));
-			fprintf(file, "Clip translation format: %s\n", get_vector_format_name(header.translation_format));
-			fprintf(file, "Clip clip range reduction: %s\n", get_range_reduction_name(header.clip_range_reduction));
-			fprintf(file, "Clip segment range reduction: %s\n", get_range_reduction_name(header.segment_range_reduction));
-			fprintf(file, "Clip num default tracks: %u\n", num_default_tracks);
-			fprintf(file, "Clip num constant tracks: %u\n", num_constant_tracks);
-			fprintf(file, "Clip num animated tracks: %u\n", num_animated_tracks);
-			fprintf(file, "Clip num segments: %u\n", header.num_segments);
-
-			if (settings.segmenting.enabled)
-			{
-				fprintf(file, "Clip segmenting ideal num samples: %u\n", settings.segmenting.ideal_num_samples);
-				fprintf(file, "Clip segmenting max num samples: %u\n", settings.segmenting.max_num_samples);
-			}
 		}
 	}
 }
