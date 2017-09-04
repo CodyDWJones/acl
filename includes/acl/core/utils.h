@@ -34,13 +34,19 @@
 namespace acl
 {
 	template<typename FloatType>
-	inline void calculate_interpolation_keys(uint32_t num_samples, FloatType clip_duration, FloatType sample_time, uint32_t& out_key_frame0, uint32_t& out_key_frame1, FloatType& out_interpolation_alpha)
+	inline FloatType calculate_sample_key(uint32_t num_samples, FloatType clip_duration, FloatType sample_time)
 	{
-		// Samples are evenly spaced, trivially calculate the indices that we need
 		ACL_ENSURE(sample_time >= FloatType(0.0) && sample_time <= clip_duration, "Invalid sample time. 0.0 <= %f <= %f", sample_time, clip_duration);
 
 		FloatType sample_rate = clip_duration == FloatType(0.0) ? FloatType(0.0) : floor((FloatType(num_samples - 1) / clip_duration) + FloatType(0.5));
-		FloatType sample_key = sample_time * sample_rate;
+		return sample_time * sample_rate;
+	}
+
+	template<typename FloatType>
+	inline void calculate_interpolation_keys(uint32_t num_samples, FloatType clip_duration, FloatType sample_time, uint32_t& out_key_frame0, uint32_t& out_key_frame1, FloatType& out_interpolation_alpha)
+	{
+		// Samples are evenly spaced, trivially calculate the indices that we need
+		FloatType sample_key = calculate_sample_key(num_samples, clip_duration, sample_time);
 		uint32_t key_frame0 = uint32_t(floor(sample_key));
 		uint32_t key_frame1 = std::min(key_frame0 + 1, num_samples - 1);
 		FloatType interpolation_alpha = sample_key - FloatType(key_frame0);

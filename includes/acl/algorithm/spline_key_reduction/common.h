@@ -40,12 +40,6 @@ namespace acl
 			struct Constants
 			{
 				static constexpr uint32_t NUM_TRACKS_PER_BONE = 2;
-
-				static constexpr uint32_t LAST_FRAME_LENGTH_LOW_BIT		=  0;
-				static constexpr uint32_t LAST_FRAME_LENGTH_HIGH_BIT	= 14;
-				static constexpr uint32_t FRAME_LENGTH_LOW_BIT			= 15;
-				static constexpr uint32_t FRAME_LENGTH_HIGH_BIT			= 29;
-				static constexpr uint32_t FRAME_TYPE_LOW_BIT			= 30;
 			};
 
 			struct FrameHeader
@@ -54,6 +48,43 @@ namespace acl
 				uint32_t				frame_type_and_offsets;
 				uint32_t				sample_index;
 				uint32_t				bones_having_data[];						// TODO: change to be [1] instead and adjust the sizeof computation
+
+				static constexpr uint32_t FRAME_TYPE_MASK = 0xC0000000;
+				static constexpr uint32_t FRAME_TYPE_SHIFT = 30;
+
+				static constexpr uint32_t LENGTH_MASK = 0x3FFF8000;
+				static constexpr uint32_t LENGTH_SHIFT = 15;
+
+				static constexpr uint32_t PREVIOUS_LENGTH_MASK = 0x00007FFF;
+				static constexpr uint32_t PREVIOUS_LENGTH_SHIFT = 0;
+
+				AnimationTrackType8 get_frame_type() const { return static_cast<AnimationTrackType8>(frame_type_and_offsets >> FRAME_TYPE_SHIFT); }
+
+				void set_frame_type(AnimationTrackType8 track_type)
+				{
+					frame_type_and_offsets &= ~FRAME_TYPE_MASK;
+					frame_type_and_offsets |= static_cast<uint32_t>(track_type) << FRAME_TYPE_SHIFT;
+				}
+
+				uint32_t get_frame_length() const { return (frame_type_and_offsets & LENGTH_MASK) >> LENGTH_SHIFT; }
+
+				void set_frame_length(uint32_t length)
+				{
+					ACL_ENSURE(length & (LENGTH_MASK >> LENGTH_SHIFT) == length, "Frame length %d is too large to store", length);
+
+					frame_type_and_offsets &= ~LENGTH_MASK;
+					frame_type_and_offsets |= length << LENGTH_SHIFT;
+				}
+
+				uint32_t get_previous_frame_length() const { return (frame_type_and_offsets & PREVIOUS_LENGTH_MASK) >> PREVIOUS_LENGTH_SHIFT; }
+
+				void set_previous_frame_length(uint32_t length)
+				{
+					ACL_ENSURE(length & (PREVIOUS_LENGTH_MASK >> PREVIOUS_LENGTH_SHIFT) == length, "Previous frame length %d is too large to store", length);
+
+					frame_type_and_offsets &= ~PREVIOUS_LENGTH_MASK;
+					frame_type_and_offsets |= length << PREVIOUS_LENGTH_SHIFT;
+				}
 			};
 
 			// TODO: merge with uniformly sampled's and put in a common place.

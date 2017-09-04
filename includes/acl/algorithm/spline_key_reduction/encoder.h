@@ -291,7 +291,7 @@ namespace acl
 				Vector4_32 value;
 				uint32_t sample_index = at_sample_index;
 
-				for (int8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX; control_point_index >= 0; --control_point_index)
+				for (int8_t control_point_index = LEFT_INTERPOLATION_KNOT_INDEX; control_point_index >= 0; --control_point_index)
 				{
 					while (true)
 					{
@@ -309,7 +309,7 @@ namespace acl
 
 				sample_index = at_sample_index;
 
-				for (uint8_t control_point_index = FIRST_INTERPOLATION_KNOT_INDEX + 1; control_point_index < NUM_CONTROL_POINTS; ++control_point_index)
+				for (uint8_t control_point_index = RIGHT_INTERPOLATION_KNOT_INDEX; control_point_index < NUM_CONTROL_POINTS; ++control_point_index)
 				{
 					while (true)
 					{

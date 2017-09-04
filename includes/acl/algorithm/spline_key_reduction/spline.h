@@ -38,9 +38,22 @@ namespace acl
 			constexpr uint32_t POLYNOMIAL_ORDER = 3;
 			constexpr uint32_t NUM_CONTROL_POINTS = POLYNOMIAL_ORDER + 1;
 
-			constexpr uint32_t FIRST_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
-			constexpr uint32_t NUM_LEFT_AUXILIARY_POINTS = FIRST_INTERPOLATION_KNOT_INDEX;
-			constexpr uint32_t NUM_RIGHT_AUXILIARY_POINTS = POLYNOMIAL_ORDER - (FIRST_INTERPOLATION_KNOT_INDEX + 1);
+			/* A cubic spline interpolates values between the innermost control points:
+
+									 [....................]
+
+					     control     control        control      control
+			             point 0     point 1        point 2      point 3
+
+			               ^^                                      ^^
+			   But these two other points might not exist in the original data,
+			   so auxiliary control points must be added to allow the use of the
+			   cubic function near the start or end.
+			*/
+			constexpr uint32_t LEFT_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
+			constexpr uint32_t RIGHT_INTERPOLATION_KNOT_INDEX = LEFT_INTERPOLATION_KNOT_INDEX + 1;
+			constexpr uint32_t NUM_LEFT_AUXILIARY_POINTS = LEFT_INTERPOLATION_KNOT_INDEX;
+			constexpr uint32_t NUM_RIGHT_AUXILIARY_POINTS = POLYNOMIAL_ORDER - RIGHT_INTERPOLATION_KNOT_INDEX;
 
 			inline float get_knot_delta(const Vector4_32& current_value, uint32_t current_sample_index, const Vector4_32& last_value, uint32_t last_sample_index)
 			{

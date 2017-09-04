@@ -52,12 +52,6 @@ namespace acl
 				uint32_t sample_indices[NUM_CONTROL_POINTS];
 			};
 
-			struct SegmentOffsets
-			{
-				uint32_t first_control_point_segment_offset;
-				uint32_t last_control_point_segment_offset;
-			};
-
 			struct DecompressionContext
 			{
 				// Read-only data
@@ -85,8 +79,11 @@ namespace acl
 				uint32_t default_track_offset;
 				uint32_t clip_range_data_offset;
 
-				ControlPoint* bone_control_points;
-				SegmentOffsets* bone_segment_offsets;
+				ControlPoint* rotation_control_points;
+				FrameHeader* rotation_frame;
+
+				ControlPoint* translation_control_points;
+				FrameHeader* translation_frame;
 			};
 
 			template<class SettingsType>
@@ -139,6 +136,76 @@ namespace acl
 				context.bitset_size = get_bitset_size(header.num_bones * Constants::NUM_TRACKS_PER_BONE);
 				context.num_rotation_components = rotation_format == RotationFormat8::Quat_128 ? 4 : 3;
 
+				// TODO: initialize to the first rotation frame
+				context.rotation_frame = nullptr;
+
+				// TODO: initialize to the first translation frame
+				context.translation_frame = nullptr;
+
+				for (uint16_t bone_index = 0; bone_index < header.num_bones; ++bone_index)
+				{
+					ControlPoints& control_points = context.bone_control_points + bone_index;
+
+					control_points.values[NUM_CONTROL_POINTS - 1] = vector_zero_32();	// TODO - read from frame
+					control_points.knots[NUM_CONTROL_POINTS - 1] = 0;
+					control_points.sample_indices[NUM_CONTROL_POINTS - 1] = 0;
+					
+					// TODO: apply same values to all indices? Decide after proto-implementing seek().
+
+					// The other array elements will be initialized by seek() when it is first called.
+				}
+			}
+
+			// TODO: check with Nicholas whether to use _0 and _1 instead of 0 and 1 suffixes. I can switch uniform code if necessary.
+
+			enum class SeekDirection
+			{
+				None,
+				Left,
+				Right
+			};
+
+			inline void seek(uint16_t num_bones, float sample_key, ControlPoints* out_control_points, FrameHeader*& out_header)
+			{
+				while (true)
+				{
+					SeekDirection seek_direction = SeekDirection::None;
+
+					for (uint16_t bone_index = 0; bone_index < num_bones; ++bone_index)
+					{
+						if (out_control_points[bone_index].sample_indices[LEFT_INTERPOLATION_KNOT_INDEX] > sample_key)
+						{
+							seek_direction = SeekDirection::Left;
+							break;
+						}
+						else if (out_control_points[bone_index].sample_indices[RIGHT_INTERPOLATION_KNOT_INDEX] < sample_key)
+						{
+							seek_direction = SeekDirection::Right;
+							break;
+						}
+					}
+
+					if (seek_direction == SeekDirection::None)
+						break;
+
+					if (seek_direction == SeekDirection::Left)
+					{
+						uint32_t offset = 
+
+						// Read the previous frame and for each set bone, shift the control points right one position and load
+						// new values into the leftmost.
+					}
+					else if (seek_direction == SeekDirection::Right)
+					{
+						// Read the next frame and for each set bone, shift the control points right one position and load
+						// new values into the leftmost.
+					}
+				}
+			}
+
+			template<class SettingsType>
+			inline void seek(const SettingsType& settings, const ClipHeader& header, float sample_time, DecompressionContext& context)
+			{
 				context.constant_track_offset = 0;
 				context.constant_track_data_offset = 0;
 				context.default_track_offset = 0;
@@ -146,22 +213,9 @@ namespace acl
 				context.format_per_track_data_offset = 0;
 				context.segment_range_data_offset = 0;
 
-				for (uint16_t bone_index = 0; bone_index < header.num_bones; ++bone_index)
-				{
-					ControlPoint& pt = context.bone_control_points + bone_index;
-					
-					// need to load initial values here - requires reading the animated data
-					// either that or make seek more complicated; "initialized" flag that tells it
-					// how far to read.
+				float sample_key = calculate_sample_key(header.num_samples, context.clip_duration, sample_time);
 
-					pt.value
-				}
-			}
 
-			template<class SettingsType>
-			inline void seek(const SettingsType& settings, const ClipHeader& header, float sample_time, DecompressionContext& context)
-			{
-				// Convert sample time into a pair of sample keyframes + t.
 
 				// Read through all the bones compiling the smallest range of samples that are permitted.
 
@@ -188,17 +242,6 @@ namespace acl
 				//		shift in sample index too
 
 				// TODO: generalize seek or create custom version that ignores bones that decompress_bone doesn't need?
-
-				context.constant_track_offset = 0;
-				context.constant_track_data_offset = 0;
-				context.default_track_offset = 0;
-				context.clip_range_data_offset = 0;
-				context.format_per_track_data_offset = 0;
-				context.segment_range_data_offset = 0;
-
-				uint32_t key_frame0;
-				uint32_t key_frame1;
-				calculate_interpolation_keys(header.num_samples, context.clip_duration, sample_time, key_frame0, key_frame1, context.interpolation_alpha);
 
 				uint32_t segment_key_frame0;
 				uint32_t segment_key_frame1;
@@ -964,8 +1007,13 @@ namespace acl
 			const ClipHeader& clip_header = get_clip_header(clip);
 
 			DecompressionContext* context = allocate_type<DecompressionContext>(allocator);
-			context.bone_control_points = allocate_type_array<ControlPoints>(allocator, clip_header.num_bones);
-			context.bone_segment_offsets = allocate_type_array<SegmentOffsets>(allocator, clip_header.num_bones);
+			
+			context.rotation_control_points = allocate_type_array<ControlPoints>(allocator, clip_header.num_bones);
+			context.rotation_segment_offsets = allocate_type_array<SegmentOffsets>(allocator, clip_header.num_bones);
+			
+			context.translation_control_points = allocate_type_array<ControlPoints>(allocator, clip_header.num_bones);
+			context.translation_segment_offsets = allocate_type_array<SegmentOffsets>(allocator, clip_header.num_bones);
+
 			initialize_context(settings, clip_header, *context);
 
 			return context;
@@ -976,8 +1024,13 @@ namespace acl
 			using namespace impl;
 
 			DecompressionContext* context = safe_ptr_cast<DecompressionContext>(opaque_context);
-			deallocate_type_array(allocator, context->bone_control_points, context->num_bones);
-			deallocate_type_array(allocator, context->bone_segment_offsets, context->num_bones);
+			
+			deallocate_type_array(allocator, context->rotation_control_points, context->num_bones);
+			deallocate_type_array(allocator, context->rotation_segment_offsets, context->num_bones);
+			
+			deallocate_type_array(allocator, context->translation_control_points, context->num_bones);
+			deallocate_type_array(allocator, context->translation_segment_offsets, context->num_bones);
+			
 			deallocate_type<DecompressionContext>(allocator, context);
 		}
 
