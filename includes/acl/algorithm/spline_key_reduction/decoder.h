@@ -158,49 +158,19 @@ namespace acl
 
 			// TODO: check with Nicholas whether to use _0 and _1 instead of 0 and 1 suffixes. I can switch uniform code if necessary.
 
-			enum class SeekDirection
+			enum class Direction
 			{
-				None,
 				Left,
 				Right
 			};
 
-			inline void seek(uint16_t num_bones, float sample_key, ControlPoints* out_control_points, FrameHeader*& out_header)
+			inline void load_frames_stopping_after(AnimationTrackType8 track_type, Direction direction)
 			{
-				while (true)
-				{
-					SeekDirection seek_direction = SeekDirection::None;
+				// Read the previous frame and for each set bone, shift the control points right one position and load
+				// new values into the leftmost.
 
-					for (uint16_t bone_index = 0; bone_index < num_bones; ++bone_index)
-					{
-						if (out_control_points[bone_index].sample_indices[LEFT_INTERPOLATION_KNOT_INDEX] > sample_key)
-						{
-							seek_direction = SeekDirection::Left;
-							break;
-						}
-						else if (out_control_points[bone_index].sample_indices[RIGHT_INTERPOLATION_KNOT_INDEX] < sample_key)
-						{
-							seek_direction = SeekDirection::Right;
-							break;
-						}
-					}
+				// Do same but stop after reading a translation frame. Allow reading of rotation frames.
 
-					if (seek_direction == SeekDirection::None)
-						break;
-
-					if (seek_direction == SeekDirection::Left)
-					{
-						uint32_t offset = 
-
-						// Read the previous frame and for each set bone, shift the control points right one position and load
-						// new values into the leftmost.
-					}
-					else if (seek_direction == SeekDirection::Right)
-					{
-						// Read the next frame and for each set bone, shift the control points right one position and load
-						// new values into the leftmost.
-					}
-				}
 			}
 
 			template<class SettingsType>
@@ -215,7 +185,43 @@ namespace acl
 
 				float sample_key = calculate_sample_key(header.num_samples, context.clip_duration, sample_time);
 
+			move_loop:
+				bool restart = false;
 
+				for (uint16_t bone_index = 0; bone_index < num_bones; ++bone_index)
+				{
+					while (context.rotation_control_points[bone_index].sample_indices[LEFT_INTERPOLATION_KNOT_INDEX] > sample_key)
+					{
+						load_frames_stopping_after(AnimationTrackType8::Rotation, Direction::Left);
+						restart = true;
+					}
+					
+					if (restart) goto move_loop;
+
+					while (context.translation_control_points[bone_index].sample_indices[LEFT_INTERPOLATION_KNOT_INDEX] > sample_key)
+					{
+						load_frames_stopping_after(AnimationTrackType8::Translation, Direction::Left);
+						restart = true;
+					}
+
+					if (restart) goto move_loop;
+
+					while (context.rotation_control_points[bone_index].sample_indices[RIGHT_INTERPOLATION_KNOT_INDEX] < sample_key)
+					{
+						load_frames_stopping_after(AnimationTrackType8::Rotation, Direction::Right);
+						restart = true;
+					}
+
+					if (restart) goto move_loop;
+
+					while (context.translation_control_points[bone_index].sample_indices[RIGHT_INTERPOLATION_KNOT_INDEX] < sample_key)
+					{
+						load_frames_stopping_after(AnimationTrackType8::Translation, Direction::Right);
+						restart = true;
+					}
+
+					if (restart) goto move_loop;
+				}
 
 				// Read through all the bones compiling the smallest range of samples that are permitted.
 

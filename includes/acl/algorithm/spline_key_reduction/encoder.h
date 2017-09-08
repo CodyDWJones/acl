@@ -600,18 +600,20 @@ namespace acl
 				out_animated_track_data += sizeof(FrameHeader) + bitset_size * sizeof(uint32_t);
 				out_bit_offset = (out_animated_track_data - animated_track_data_begin) * 8;
 
-				frame_header->frame_type_and_offsets = static_cast<uint32_t>(track_type) << Constants::FRAME_TYPE_LOW_BIT;
+				frame_header->set_frame_type(track_type);
+				frame_header->set_frame_length(0);
 
 				if (out_previous_frame_header != nullptr)
 				{
 					size_t length = (reinterpret_cast<uintptr_t>(frame_header) - reinterpret_cast<uintptr_t>(out_previous_frame_header)) / 4;
 					ACL_ENSURE(add_offset_to_ptr<FrameHeader>(out_previous_frame_header, 4 * length) == frame_header, "A frame is not 4-byte aligned");
 
-					ACL_ENSURE(length < (1 << (Constants::FRAME_LENGTH_HIGH_BIT - Constants::FRAME_LENGTH_LOW_BIT + 1)), "Frame length is too large to store");
-					out_previous_frame_header->frame_type_and_offsets |= length << Constants::FRAME_LENGTH_LOW_BIT;
-
-					ACL_ENSURE(length < (1 << (Constants::LAST_FRAME_LENGTH_HIGH_BIT - Constants::LAST_FRAME_LENGTH_LOW_BIT + 1)), "Frame offset is too large to store");
-					frame_header->frame_type_and_offsets |= length << Constants::LAST_FRAME_LENGTH_LOW_BIT;
+					out_previous_frame_header->set_frame_length(length);
+					frame_header->set_previous_frame_length(length);
+				}
+				else
+				{
+					frame_header->set_previous_frame_length(0);
 				}
 
 				out_previous_frame_header = frame_header;
