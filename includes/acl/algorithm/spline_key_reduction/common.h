@@ -52,11 +52,11 @@ namespace acl
 				static constexpr uint32_t FRAME_TYPE_MASK = 0xC0000000;
 				static constexpr uint32_t FRAME_TYPE_SHIFT = 30;
 
-				static constexpr uint32_t LENGTH_MASK = 0x3FFF8000;
-				static constexpr uint32_t LENGTH_SHIFT = 15;
+				static constexpr uint32_t NEXT_FRAME_OFFSET_MASK = 0x3FFF8000;
+				static constexpr uint32_t NEXT_FRAME_OFFSET_SHIFT = 15;
 
-				static constexpr uint32_t PREVIOUS_LENGTH_MASK = 0x00007FFF;
-				static constexpr uint32_t PREVIOUS_LENGTH_SHIFT = 0;
+				static constexpr uint32_t PREVIOUS_FRAME_OFFSET_MASK = 0x00007FFF;
+				static constexpr uint32_t PREVIOUS_FRAME_OFFSET_SHIFT = 0;
 
 				AnimationTrackType8 get_frame_type() const { return static_cast<AnimationTrackType8>(frame_type_and_offsets >> FRAME_TYPE_SHIFT); }
 
@@ -66,24 +66,37 @@ namespace acl
 					frame_type_and_offsets |= static_cast<uint32_t>(track_type) << FRAME_TYPE_SHIFT;
 				}
 
-				uint32_t get_frame_length() const { return (frame_type_and_offsets & LENGTH_MASK) >> LENGTH_SHIFT; }
+				uint32_t get_next_frame_offset() const { return ((frame_type_and_offsets & NEXT_FRAME_OFFSET_MASK) >> NEXT_FRAME_OFFSET_SHIFT) << 2; }
 
-				void set_frame_length(uint32_t length)
+				void set_next_frame_offset(uint32_t length)
 				{
-					ACL_ENSURE(length & (LENGTH_MASK >> LENGTH_SHIFT) == length, "Frame length %d is too large to store", length);
+					ACL_ENSURE(length & 3 == 0, "Offset %d to the next frame is not a multiple of 4", length);
+					uint32_t num_32_bit_words = length >> 2;
 
-					frame_type_and_offsets &= ~LENGTH_MASK;
-					frame_type_and_offsets |= length << LENGTH_SHIFT;
+					ACL_ENSURE(num_32_bit_words & (NEXT_FRAME_OFFSET_MASK >> NEXT_FRAME_OFFSET_SHIFT) == num_32_bit_words, "Frame length %d is too large to store", length);
+
+					frame_type_and_offsets &= ~NEXT_FRAME_OFFSET_MASK;
+					frame_type_and_offsets |= num_32_bit_words << NEXT_FRAME_OFFSET_SHIFT;
 				}
 
-				uint32_t get_previous_frame_length() const { return (frame_type_and_offsets & PREVIOUS_LENGTH_MASK) >> PREVIOUS_LENGTH_SHIFT; }
+				uint32_t get_previous_frame_offset() const { return ((frame_type_and_offsets & PREVIOUS_FRAME_OFFSET_MASK) >> PREVIOUS_FRAME_OFFSET_SHIFT) << 2; }
 
-				void set_previous_frame_length(uint32_t length)
+				void set_previous_frame_offset(uint32_t length)
 				{
-					ACL_ENSURE(length & (PREVIOUS_LENGTH_MASK >> PREVIOUS_LENGTH_SHIFT) == length, "Previous frame length %d is too large to store", length);
+					ACL_ENSURE(length & 3 == 0, "Offset %d to the previous frame is not a multiple of 4", length);
+					uint32_t num_32_bit_words = length >> 2;
 
-					frame_type_and_offsets &= ~PREVIOUS_LENGTH_MASK;
-					frame_type_and_offsets |= length << PREVIOUS_LENGTH_SHIFT;
+					ACL_ENSURE(num_32_bit_words & (PREVIOUS_FRAME_OFFSET_MASK >> PREVIOUS_FRAME_OFFSET_SHIFT) == num_32_bit_words, "Previous frame length %d is too large to store", length);
+
+					frame_type_and_offsets &= ~PREVIOUS_FRAME_OFFSET_MASK;
+					frame_type_and_offsets |= num_32_bit_words << PREVIOUS_FRAME_OFFSET_SHIFT;
+				}
+
+				const float* get_knots(uint16_t num_bones) const
+				{
+					uint32_t bitset_size = get_bitset_size(num_bones);
+					uint32_t num_bones_having_data = bitset_count_set_bits(bones_having_data, bitset_size);
+					const float* knots = safe_ptr_cast<float, const uint8_t*>(reinterpret_cast<const uint8_t*>(this) + get_next_frame_offset() - num_bones_having_data * sizeof(float));
 				}
 			};
 

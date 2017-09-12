@@ -46,9 +46,9 @@ namespace acl
 			             point 0     point 1        point 2      point 3
 
 			               ^^                                      ^^
-			   But these two other points might not exist in the original data,
+			   But the first and last points might not exist in the original data,
 			   so auxiliary control points must be added to allow the use of the
-			   cubic function near the start or end.
+			   cubic function near the start and end of the clip.
 			*/
 			constexpr uint32_t LEFT_INTERPOLATION_KNOT_INDEX = (POLYNOMIAL_ORDER - 1) / 2;
 			constexpr uint32_t RIGHT_INTERPOLATION_KNOT_INDEX = LEFT_INTERPOLATION_KNOT_INDEX + 1;

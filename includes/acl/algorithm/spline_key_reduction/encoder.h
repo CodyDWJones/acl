@@ -46,9 +46,10 @@
 #include "acl/compression/stream/extend_streams.h"
 #include "acl/compression/stream/normalize_streams.h"
 #include "acl/compression/stream/quantize_streams.h"
+#include "acl/compression/stream/write_range_data.h"
 #include "acl/compression/stream/write_stream_bitsets.h"
 #include "acl/compression/stream/write_stream_data.h"
-#include "acl/compression/stream/write_range_data.h"
+#include "acl/compression/stream/write_stream_stats.h"
 
 #include <stdint.h>
 #include <cstdio>
@@ -112,7 +113,7 @@ namespace acl
 
 			uint32_t hash() const
 			{
-				return hash32(rotation_format) ^ hash32(translation_format) ^ hash32(range_reduction) ^ segmenting.hash();
+				return hash_combine(hash_combine(hash_combine(hash32(rotation_format), hash32(translation_format)), hash32(range_reduction)), segmenting.hash());
 			}
 		};
 
@@ -573,6 +574,11 @@ namespace acl
 				return (num_bits + (num_bits % 32)) / 8;
 			}
 
+			inline uint32_t get_frame_size(const SegmentContext& segment, Selections*const* selections, AnimationTrackType8 track_type, uint32_t sample_index)
+			{
+				return get_frame_header_size(segment.num_bones) + get_frame_data_size(segment, selections, track_type, sample_index, true);
+			}
+
 			inline uint32_t get_animated_data_size(const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections)
 			{
 				uint32_t animated_data_size = 0;
@@ -591,7 +597,7 @@ namespace acl
 				return animated_data_size;
 			}
 
-			inline FrameHeader* write_frame_header(AnimationTrackType8 track_type, uint16_t num_bones, uint32_t sample_index, uint8_t* animated_track_data_begin,
+			inline FrameHeader* write_frame_header(const SegmentContext& segment, Selections*const* selections, AnimationTrackType8 track_type, uint16_t num_bones, uint32_t sample_index, uint8_t* animated_track_data_begin,
 				FrameHeader*& out_previous_frame_header, uint8_t*& out_animated_track_data, uint64_t& out_bit_offset)
 			{
 				uint32_t bitset_size = get_bitset_size(num_bones);
@@ -601,25 +607,12 @@ namespace acl
 				out_bit_offset = (out_animated_track_data - animated_track_data_begin) * 8;
 
 				frame_header->set_frame_type(track_type);
-				frame_header->set_frame_length(0);
-
-				if (out_previous_frame_header != nullptr)
-				{
-					size_t length = (reinterpret_cast<uintptr_t>(frame_header) - reinterpret_cast<uintptr_t>(out_previous_frame_header)) / 4;
-					ACL_ENSURE(add_offset_to_ptr<FrameHeader>(out_previous_frame_header, 4 * length) == frame_header, "A frame is not 4-byte aligned");
-
-					out_previous_frame_header->set_frame_length(length);
-					frame_header->set_previous_frame_length(length);
-				}
-				else
-				{
-					frame_header->set_previous_frame_length(0);
-				}
-
-				out_previous_frame_header = frame_header;
-
+				frame_header->set_next_frame_offset(get_frame_size(segment, selections, track_type, sample_index));
+				frame_header->set_previous_frame_offset(out_previous_frame_header == nullptr ? 0 : out_previous_frame_header->get_next_frame_offset());
 				frame_header->sample_index = sample_index;
 				bitset_reset(frame_header->bones_having_data, bitset_size, false);
+
+				out_previous_frame_header = frame_header;
 
 				return frame_header;
 			}
@@ -628,7 +621,7 @@ namespace acl
 			{
 				uint32_t sample_index;
 				Vector4_32 value;
-				float knot_delta;
+				float knot;
 			};
 
 			inline void write_frame_bone_data(const BoneStreams& bone_streams, const TrackStream& track_stream, AnimationTrackType8 track_type, uint16_t num_bones, uint32_t num_samples,
@@ -642,20 +635,20 @@ namespace acl
 				{
 					current.sample_index = 0;
 					current.value = sample(bone_streams, track_type, 0);
-					current.knot_delta = 0.0;
+					current.knot = 0.0;
 				}
 				else if (selections.is_selected(sample_index))
 				{
 					current.sample_index = sample_index;
 					current.value = sample(bone_streams, track_type, sample_index);
-					current.knot_delta = get_knot_delta(current.value, current.sample_index, last.value, last.sample_index);
+					current.knot = last.knot + get_knot_delta(current.value, current.sample_index, last.value, last.sample_index);
 				}
 
 				if (current.sample_index == sample_index)
 				{
 					bitset_set(out_frame_header.bones_having_data, get_bitset_size(num_bones), bone_streams.bone_index, true);
 					write_animated_track_data(track_stream, sample_index, false, animated_track_data_begin, out_values, out_values_bit_offset);
-					*out_knots++ = current.knot_delta;
+					*out_knots++ = current.knot;
 				}
 
 				out_control_point = current;
@@ -677,7 +670,7 @@ namespace acl
 
 						if (frame_header == nullptr)
 						{
-							frame_header = write_frame_header(track_type, segment.num_bones, sample_index, animated_track_data_begin, out_previous_frame_header, out_animated_track_data, out_bit_offset);
+							frame_header = write_frame_header(segment, sample_selections, track_type, segment.num_bones, sample_index, animated_track_data_begin, out_previous_frame_header, out_animated_track_data, out_bit_offset);
 
 							uint32_t frame_samples_size = get_frame_data_size(segment, sample_selections, track_type, sample_index, false);
 							knots = safe_ptr_cast<float, uint8_t*>(out_animated_track_data + frame_samples_size);
@@ -712,6 +705,10 @@ namespace acl
 					write_frame(segment, AnimationTrackType8::Rotation, rotation_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, rotation_control_points);
 					write_frame(segment, AnimationTrackType8::Translation, translation_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, translation_control_points);
 				}
+
+				// A zero offset indicates this is the last frame for the segment.
+				if (previous_frame_header != nullptr)
+					previous_frame_header->set_next_frame_offset(0);
 
 				if (bit_offset != 0)
 					animated_track_data = animated_track_data_begin + (align_to(bit_offset, 8) / 8);
@@ -1104,6 +1101,9 @@ namespace acl
 						writer["max_num_samples"] = settings.segmenting.max_num_samples;
 					};
 				}
+
+				if (stats.get_logging() == StatLogging::Detailed)
+					write_stream_stats(allocator, clip_context, raw_clip_context, skeleton, writer);
 			}
 #endif
 
