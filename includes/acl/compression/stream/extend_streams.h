@@ -98,4 +98,14 @@ namespace acl
 		if (bone_ranges != nullptr)
 			impl::extend_range(bone_ranges->translation, prefixes, num_prefixes, suffixes, num_suffixes);
 	}
+
+	inline void extend_scale_stream(Allocator& allocator, ScaleTrackStream& stream, BoneRanges* bone_ranges, const Vector4_32* prefixes, uint32_t num_prefixes, const Vector4_32* suffixes, uint32_t num_suffixes)
+	{
+		ScaleTrackStream extended_stream(allocator, num_prefixes + stream.get_num_samples() + num_suffixes, stream.get_sample_size(), stream.get_sample_rate(), stream.get_vector_format(), stream.get_bit_rate());
+		impl::extend_stream(extended_stream, prefixes, num_prefixes, stream, suffixes, num_suffixes);
+		stream = std::move(extended_stream);
+
+		if (bone_ranges != nullptr)
+			impl::extend_range(bone_ranges->scale, prefixes, num_prefixes, suffixes, num_suffixes);
+	}
 }

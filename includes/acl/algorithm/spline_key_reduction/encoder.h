@@ -99,6 +99,7 @@ namespace acl
 		{
 			RotationFormat8 rotation_format;
 			VectorFormat8 translation_format;
+			VectorFormat8 scale_format;
 
 			RangeReductionFlags8 range_reduction;
 
@@ -107,13 +108,14 @@ namespace acl
 			CompressionSettings()
 				: rotation_format(RotationFormat8::Quat_128)
 				, translation_format(VectorFormat8::Vector3_96)
+				, scale_format(VectorFormat8::Vector3_96)
 				, range_reduction(RangeReductionFlags8::None)
 				, segmenting()
 			{}
 
 			uint32_t hash() const
 			{
-				return hash_combine(hash_combine(hash_combine(hash32(rotation_format), hash32(translation_format)), hash32(range_reduction)), segmenting.hash());
+				return hash_combine(hash_combine(hash_combine(hash_combine(hash32(rotation_format), hash32(translation_format)), hash32(scale_format)), hash32(range_reduction)), segmenting.hash());
 			}
 		};
 
@@ -144,12 +146,6 @@ namespace acl
 				void save_state() { std::memcpy(m_selected_backup, m_selected, m_selected_size * sizeof(uint32_t)); }
 				void restore_state() { std::memcpy(m_selected, m_selected_backup, m_selected_size * sizeof(uint32_t)); }
 
-				// Not currently used...
-				//uint32_t get_num_selected() const
-				//{
-				//	return bitset_count_set_bits(m_selected, m_selected_size);
-				//}
-
 			private:
 				Allocator& m_allocator;
 				uint32_t* m_selected;
@@ -168,7 +164,7 @@ namespace acl
 					selections.select(sample_index);
 			}
 
-			inline void reset_control_point_choices(const SegmentContext& segment, Selections** rotation_selections, Selections** translation_selections)
+			inline void reset_control_point_choices(const SegmentContext& segment, Selections** rotation_selections, Selections** translation_selections, Selections** scale_selections)
 			{
 				Selections* selections;
 
@@ -179,6 +175,10 @@ namespace acl
 						reset_control_point_choices(*selections, segment.num_samples);
 
 					selections = translation_selections[bone_index];
+					if (selections != nullptr)
+						reset_control_point_choices(*selections, segment.num_samples);
+
+					selections = scale_selections[bone_index];
 					if (selections != nullptr)
 						reset_control_point_choices(*selections, segment.num_samples);
 				}
@@ -193,7 +193,7 @@ namespace acl
 					const RotationTrackStream& rotations = bone_streams.rotations;
 
 					if (rotations.is_bit_rate_variable())
-						return get_num_bits_at_bit_rate(rotations.get_bit_rate()) * 3;	// 3 components
+						return get_num_bits_at_bit_rate(rotations.get_bit_rate()) * 3;		// 3 components
 					else
 						return get_packed_rotation_size(rotations.get_rotation_format()) * 8;
 				}
@@ -206,12 +206,18 @@ namespace acl
 					else
 						return get_packed_vector_size(translations.get_vector_format()) * 8;
 				}
+				case AnimationTrackType8::Scale:
+				{
+					const ScaleTrackStream& scales = bone_streams.scales;
+
+					if (scales.is_bit_rate_variable())
+						return get_num_bits_at_bit_rate(scales.get_bit_rate()) * 3;			// 3 components
+					else
+						return get_packed_vector_size(scales.get_vector_format()) * 8;
+				}
 				default:
-					// TODO: assert
-
-					// Asserts are properly handled by the library and can be optionally skipped by the user.
-					// The code found something unexpected but recovered.
-
+					// TODO:
+					//ACL_ENSURE(1 == 0, "Unknown track type");
 					break;
 				}
 			}
@@ -269,11 +275,31 @@ namespace acl
 
 					break;
 				}
-				default:
-					// TODO: assert
+				case AnimationTrackType8::Scale:
+				{
+					int32_t num_samples = static_cast<int32_t>(bone_streams.scales.get_num_samples());
 
-					// Asserts are properly handled by the library and can be optionally skipped by the user.
-					// The code found something unexpected but recovered.
+					if (sample_index < 0)
+					{
+						int32_t right_index = std::min(-sample_index, num_samples - 1);
+
+						return vector_lerp(get_scale_sample(bone_streams, 0), get_scale_sample(bone_streams, right_index), -1.0);
+					}
+					else if (sample_index >= num_samples)
+					{
+						int32_t left_index = std::max(0, 2 * num_samples - 2 - sample_index);
+
+						return vector_lerp(get_scale_sample(bone_streams, left_index), get_scale_sample(bone_streams, num_samples - 1), 2.0);
+					}
+					else
+					{
+						return get_scale_sample(bone_streams, sample_index);
+					}
+
+					break;
+				}
+				default:
+					// TODO: ACL_ENSURE
 
 					break;
 				}
@@ -332,7 +358,7 @@ namespace acl
 				return interpolate_spline(values, knots, sample_indices, static_cast<float>(at_sample_index));
 			}
 
-			inline void interpolate_pose(const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections,
+			inline void interpolate_pose(const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, Selections*const* scale_selections,
 				uint32_t sample_index, Transform_32* out_local_pose)
 			{
 				ACL_ASSERT(NUM_LEFT_AUXILIARY_POINTS <= sample_index && sample_index <= segment.num_samples - 1 - NUM_RIGHT_AUXILIARY_POINTS, "sample_index is out of range");
@@ -360,7 +386,16 @@ namespace acl
 					else
 						translation = vector_zero_32();
 
-					out_local_pose[bone_index] = transform_set(rotation, translation);
+					Vector4_32 scale;
+					selections = scale_selections[bone_index];
+					if (selections != nullptr)
+						scale = interpolate(bone_streams, AnimationTrackType8::Scale, *selections, sample_index);
+					else if (bone_streams.is_scale_constant)
+						scale = get_scale_sample(bone_streams, 0);
+					else
+						scale = vector_set(1.0f);
+
+					out_local_pose[bone_index] = transform_set(rotation, translation, scale);
 				}
 			}
 
@@ -406,28 +441,46 @@ namespace acl
 					if (bone_streams.is_rotation_animated())
 					{
 						RotationTrackStream& stream = bone_streams.rotations;
+
 						get_auxiliary_control_points(segment.clip_sample_offset, stream.get_num_samples(), raw_bone_streams, AnimationTrackType8::Rotation, prefixes, num_prefixes, suffixes, num_suffixes);
 						extend_rotation_stream(allocator, stream, bone_range, prefixes, num_prefixes, suffixes, num_suffixes);
-						segment.num_samples = stream.get_num_samples();
+
+						// TODO: won't this cause a problem if the clip is longer than 2^16 samples and segmenting is disabled??
+						ACL_ENSURE(stream.get_num_samples() <= UINT16_MAX, "The stream was extended with auxiliary control points but now exceeds %d samples", UINT16_MAX);
+						segment.num_samples = static_cast<uint16_t>(stream.get_num_samples());
 					}
 
 					if (bone_streams.is_translation_animated())
 					{
 						TranslationTrackStream& stream = bone_streams.translations;
+
 						get_auxiliary_control_points(segment.clip_sample_offset, stream.get_num_samples(), raw_bone_streams, AnimationTrackType8::Translation, prefixes, num_prefixes, suffixes, num_suffixes);
 						extend_translation_stream(allocator, stream, bone_range, prefixes, num_prefixes, suffixes, num_suffixes);
-						segment.num_samples = stream.get_num_samples();
+
+						ACL_ENSURE(stream.get_num_samples() <= UINT16_MAX, "The stream was extended with auxiliary control points but now exceeds %d samples", UINT16_MAX);
+						segment.num_samples = static_cast<uint16_t>(stream.get_num_samples());
+					}
+
+					if (bone_streams.is_scale_animated())
+					{
+						ScaleTrackStream& stream = bone_streams.scales;
+
+						get_auxiliary_control_points(segment.clip_sample_offset, stream.get_num_samples(), raw_bone_streams, AnimationTrackType8::Scale, prefixes, num_prefixes, suffixes, num_suffixes);
+						extend_scale_stream(allocator, stream, bone_range, prefixes, num_prefixes, suffixes, num_suffixes);
+
+						ACL_ENSURE(stream.get_num_samples() <= UINT16_MAX, "The stream was extended with auxiliary control points but now exceeds %d samples", UINT16_MAX);
+						segment.num_samples = static_cast<uint16_t>(stream.get_num_samples());
 					}
 				}
 			}
 
 			inline void try_control_points_at(Allocator& allocator, const RigidSkeleton& skeleton, const SegmentContext& segment,
-				uint32_t sample_index, Selections** rotation_selections, Selections** translation_selections,
+				uint32_t sample_index, Selections** rotation_selections, Selections** translation_selections, Selections** scale_selections,
 				float* error_per_bone, BoneTrackError* error_per_stream, Transform_32* raw_local_pose, Transform_32* lossy_local_pose,
-				Selections*& out_modified_rotation_selections, Selections*& out_modified_translation_selections)
+				Selections*& out_modified_rotation_selections, Selections*& out_modified_translation_selections, Selections*& out_modified_scale_selections)
 			{
 				sample_streams(segment.bone_streams, segment.num_bones, sample_index, raw_local_pose);
-				interpolate_pose(segment, rotation_selections, translation_selections, sample_index, lossy_local_pose);
+				interpolate_pose(segment, rotation_selections, translation_selections, scale_selections, sample_index, lossy_local_pose);
 
 				double error = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose, error_per_bone);
 
@@ -435,6 +488,7 @@ namespace acl
 				{
 					out_modified_rotation_selections = nullptr;
 					out_modified_translation_selections = nullptr;
+					out_modified_scale_selections = nullptr;
 					return;
 				}
 
@@ -462,16 +516,17 @@ namespace acl
 				{
 					bool rotation_is_interpolated = rotation_selections[bone_index] != nullptr && !rotation_selections[bone_index]->is_selected(sample_index);
 					bool translation_is_interpolated = translation_selections[bone_index] != nullptr && !translation_selections[bone_index]->is_selected(sample_index);
+					bool scale_is_interpolated = scale_selections[bone_index] != nullptr && !scale_selections[bone_index]->is_selected(sample_index);
 
-					if (!rotation_is_interpolated && !translation_is_interpolated)
+					if (!rotation_is_interpolated && !translation_is_interpolated && !scale_is_interpolated)
 						continue;
 
-					const BoneTrackError& error = error_per_stream[bone_index];
+					const BoneTrackError& stream_error = error_per_stream[bone_index];
 
-					if (error.rotation + error.translation > worst_error_contribution)
+					if (stream_error.rotation + stream_error.translation > worst_error_contribution)
 					{
 						bad_bone_index = bone_index;
-						worst_error_contribution = error.rotation + error.translation;
+						worst_error_contribution = stream_error.rotation + stream_error.translation;
 					}
 				}
 
@@ -483,6 +538,13 @@ namespace acl
 				Selections* bad_bone_translations = translation_selections[bad_bone_index];
 				bool translation_was_selected = bad_bone_translations != nullptr && bad_bone_translations->is_selected(sample_index);
 
+				Selections* bad_bone_scales = scale_selections[bad_bone_index];
+				bool scale_was_selected = bad_bone_scales != nullptr && bad_bone_scales->is_selected(sample_index);
+
+				// **************************************************************************************************************************************
+				// TODO: need more combinations here :(
+				// **************************************************************************************************************************************
+
 				if (bad_bone_rotations != nullptr && !bad_bone_rotations->is_selected(sample_index))
 				{
 					if (bad_bone_translations == nullptr || bad_bone_translations->is_selected(sample_index))
@@ -493,7 +555,7 @@ namespace acl
 					{
 						bad_bone_rotations->select(sample_index);
 
-						interpolate_pose(segment, rotation_selections, translation_selections, sample_index, lossy_local_pose);
+						interpolate_pose(segment, rotation_selections, translation_selections, scale_selections, sample_index, lossy_local_pose);
 						double error_without_interpolated_rotation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
 
 						if (error_without_interpolated_rotation > segment.clip->error_threshold)
@@ -501,7 +563,7 @@ namespace acl
 							bad_bone_rotations->deselect(sample_index);
 							bad_bone_translations->select(sample_index);
 
-							interpolate_pose(segment, rotation_selections, translation_selections, sample_index, lossy_local_pose);
+							interpolate_pose(segment, rotation_selections, translation_selections, scale_selections, sample_index, lossy_local_pose);
 							double error_without_interpolated_translation = calculate_skeleton_error(allocator, skeleton, raw_local_pose, lossy_local_pose);
 
 							if (error_without_interpolated_translation > error_without_interpolated_rotation)
@@ -523,28 +585,37 @@ namespace acl
 				bool changed_translation = bad_bone_translations != nullptr && translation_was_selected != bad_bone_translations->is_selected(sample_index);
 				out_modified_translation_selections = changed_translation ? bad_bone_translations : nullptr;
 
+				bool changed_scale = bad_bone_scales != nullptr && scale_was_selected != bad_bone_scales->is_selected(sample_index);
+				out_modified_scale_selections = changed_scale ? bad_bone_scales : nullptr;
+
 				ACL_ASSERT(changed_rotation || changed_translation, "No changes were made to the bone with the worst error contribution");
 			}
 
-			inline void rewind_to_first_affected_sample(const Selections* modified_rotation_selections, const Selections* modified_translation_selections, uint32_t& out_sample_index)
+			inline void rewind_to_first_affected_sample(const Selections* modified_rotation_selections, const Selections* modified_translation_selections, const Selections* modified_scale_selections, uint32_t& out_sample_index)
 			{
-				if (modified_rotation_selections == nullptr && modified_translation_selections == nullptr)
+				if (modified_rotation_selections == nullptr && modified_translation_selections == nullptr && modified_scale_selections == nullptr)
 					return;
 
 				uint32_t num_rotation_points = 0,
 					min_rotation_points = modified_rotation_selections == nullptr ? 0 : NUM_CONTROL_POINTS - 1,
 					num_translation_points = 0,
-					min_translation_points = modified_translation_selections == nullptr ? 0 : NUM_CONTROL_POINTS - 1;
+					min_translation_points = modified_translation_selections == nullptr ? 0 : NUM_CONTROL_POINTS - 1,
+					num_scale_points = 0,
+					min_scale_points = modified_scale_selections == nullptr ? 0 : NUM_CONTROL_POINTS - 1;
 
 				while (out_sample_index > NUM_LEFT_AUXILIARY_POINTS + 1 &&
 					(num_rotation_points < min_rotation_points || min_rotation_points == 0) &&
-					(num_translation_points <= min_translation_points || min_translation_points == 0))
+					(num_translation_points <= min_translation_points || min_translation_points == 0) &&
+					(num_scale_points <= min_scale_points || min_scale_points == 0))
 				{
 					if (modified_rotation_selections != nullptr && modified_rotation_selections->is_selected(out_sample_index))
 						++num_rotation_points;
 
 					if (modified_translation_selections != nullptr && modified_translation_selections->is_selected(out_sample_index))
 						++num_translation_points;
+
+					if (modified_scale_selections != nullptr && modified_scale_selections->is_selected(out_sample_index))
+						++num_scale_points;
 
 					--out_sample_index;
 				}
@@ -579,7 +650,7 @@ namespace acl
 				return get_frame_header_size(segment.num_bones) + get_frame_data_size(segment, selections, track_type, sample_index, true);
 			}
 
-			inline uint32_t get_animated_data_size(const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections)
+			inline uint32_t get_animated_data_size(const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, Selections*const* scale_selections)
 			{
 				uint32_t animated_data_size = 0;
 
@@ -592,9 +663,24 @@ namespace acl
 					data_size = get_frame_data_size(segment, translation_selections, AnimationTrackType8::Translation, sample_index, true);
 					if (data_size > 0)
 						animated_data_size += get_frame_header_size(segment.num_bones) + data_size;
+
+					data_size = get_frame_data_size(segment, scale_selections, AnimationTrackType8::Scale, sample_index, true);
+					if (data_size > 0)
+						animated_data_size += get_frame_header_size(segment.num_bones) + data_size;
 				}
 
 				return animated_data_size;
+			}
+
+			inline void calculate_animated_data_size(ClipContext& clip_context, Selections*const* rotation_selections, Selections*const* translation_selections, Selections*const* scale_selections)
+			{
+				for (SegmentContext& segment : clip_context.segment_iterator())
+				{
+					segment.animated_data_size = get_animated_data_size(segment, rotation_selections, translation_selections, scale_selections);
+
+					// This field is irrelevant since each frame contains control points for a variable number of bones.
+					segment.animated_pose_bit_size = 0;
+				}
 			}
 
 			inline FrameHeader* write_frame_header(const SegmentContext& segment, Selections*const* selections, AnimationTrackType8 track_type, uint16_t num_bones, uint32_t sample_index, uint8_t* animated_track_data_begin,
@@ -690,7 +776,7 @@ namespace acl
 				}
 			}
 
-			inline void write_animated_track_data(Allocator& allocator, const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, uint8_t* animated_track_data, uint32_t animated_data_size)
+			inline void write_animated_track_data(Allocator& allocator, const SegmentContext& segment, Selections*const* rotation_selections, Selections*const* translation_selections, Selections*const* scale_selections, uint8_t* animated_track_data, uint32_t animated_data_size)
 			{
 				uint8_t* animated_track_data_begin = animated_track_data;
 				const uint8_t* animated_track_data_end = add_offset_to_ptr<uint8_t>(animated_track_data, animated_data_size);
@@ -699,11 +785,13 @@ namespace acl
 
 				ControlPoint* rotation_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
 				ControlPoint* translation_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
+				ControlPoint* scale_control_points = allocate_type_array<ControlPoint>(allocator, segment.num_bones);
 
 				for (uint32_t sample_index = 0; sample_index < segment.num_samples; ++sample_index)
 				{
 					write_frame(segment, AnimationTrackType8::Rotation, rotation_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, rotation_control_points);
 					write_frame(segment, AnimationTrackType8::Translation, translation_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, translation_control_points);
+					write_frame(segment, AnimationTrackType8::Scale, scale_selections, sample_index, animated_track_data_begin, animated_track_data_end, previous_frame_header, animated_track_data, bit_offset, scale_control_points);
 				}
 
 				// A zero offset indicates this is the last frame for the segment.
@@ -717,12 +805,13 @@ namespace acl
 
 				deallocate_type_array(allocator, rotation_control_points, segment.num_bones);
 				deallocate_type_array(allocator, translation_control_points, segment.num_bones);
+				deallocate_type_array(allocator, scale_control_points, segment.num_bones);
 			}
 
 			// TODO: merge all instances to write_stream_data.h
 			inline void write_segment_headers(const ClipContext& clip_context, const CompressionSettings& settings, SegmentHeader* segment_headers, uint16_t segment_headers_start_offset)
 			{
-				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
+				const uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format, settings.scale_format);
 
 				uint32_t data_offset = segment_headers_start_offset;
 				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
@@ -740,10 +829,10 @@ namespace acl
 			}
 
 			// TODO: merge all instances to write_stream_data.h.  Add a lambda parameter so caller can override writing of animated data.
-			inline void write_segment_data(Allocator& allocator, const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header, Selections*const* rotation_selections, Selections*const* translation_selections)
+			inline void write_segment_data(Allocator& allocator, const ClipContext& clip_context, const CompressionSettings& settings, ClipHeader& header, Selections*const* rotation_selections, Selections*const* translation_selections, Selections*const* scale_selections)
 			{
 				SegmentHeader* segment_headers = header.get_segment_headers();
-				uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
+				const uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format, settings.scale_format);
 
 				for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
 				{
@@ -751,24 +840,24 @@ namespace acl
 					SegmentHeader& segment_header = segment_headers[segment_index];
 
 					if (format_per_track_data_size > 0)
-						write_format_per_track_data(segment.bone_streams, segment.num_bones, header.get_format_per_track_data(segment_header), format_per_track_data_size);
+						write_format_per_track_data(clip_context, segment, header.get_format_per_track_data(segment_header), format_per_track_data_size);
 					else
 						segment_header.format_per_track_data_offset = InvalidPtrOffset();
 
 					if (segment.range_data_size > 0)
-						write_segment_range_data(segment, settings.range_reduction, header.get_segment_range_data(segment_header), segment.range_data_size);
+						write_segment_range_data(clip_context, segment, settings.range_reduction, header.get_segment_range_data(segment_header), segment.range_data_size);
 					else
 						segment_header.range_data_offset = InvalidPtrOffset();
 
 					if (segment.animated_data_size > 0)
-						write_animated_track_data(allocator, segment, rotation_selections, translation_selections, header.get_track_data(segment_header), segment.animated_data_size);
+						write_animated_track_data(allocator, segment, rotation_selections, translation_selections, scale_selections, header.get_track_data(segment_header), segment.animated_data_size);
 					else
 						segment_header.track_data_offset = InvalidPtrOffset();
 				}
 			}
 
 			inline void choose_control_points(Allocator& allocator, const RigidSkeleton& skeleton, const SegmentContext& segment,
-				Selections** rotation_selections, Selections** translation_selections)
+				Selections** rotation_selections, Selections** translation_selections, Selections** scale_selections)
 			{
 				float* error_per_bone = allocate_type_array<float>(allocator, segment.num_bones);
 				BoneTrackError* error_per_stream = allocate_type_array<BoneTrackError>(allocator, segment.num_bones);
@@ -777,16 +866,17 @@ namespace acl
 
 				Selections* modified_rotation_selections;
 				Selections* modified_translation_selections;
+				Selections* modified_scale_selections;
 
 				// Try assigning control points sequentially.  Most of the time this will provide a better compression ratio.
-				reset_control_point_choices(segment, rotation_selections, translation_selections);
+				reset_control_point_choices(segment, rotation_selections, translation_selections, scale_selections);
 
 				for (uint32_t sample_index = NUM_LEFT_AUXILIARY_POINTS + 1; sample_index <= segment.num_samples - 1 - (NUM_RIGHT_AUXILIARY_POINTS + 1); ++sample_index)
 				{
-					try_control_points_at(allocator, skeleton, segment, sample_index, rotation_selections, translation_selections,
-						error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose, modified_rotation_selections, modified_translation_selections);
+					try_control_points_at(allocator, skeleton, segment, sample_index, rotation_selections, translation_selections, scale_selections,
+						error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose, modified_rotation_selections, modified_translation_selections, modified_scale_selections);
 
-					rewind_to_first_affected_sample(modified_rotation_selections, modified_translation_selections, sample_index);
+					rewind_to_first_affected_sample(modified_rotation_selections, modified_translation_selections, modified_scale_selections, sample_index);
 				}
 
 				for (uint16_t bone_index = 0; bone_index < segment.num_bones; ++bone_index)
@@ -796,28 +886,31 @@ namespace acl
 
 					if (translation_selections[bone_index] != nullptr)
 						translation_selections[bone_index]->save_state();
+
+					if (scale_selections[bone_index] != nullptr)
+						scale_selections[bone_index]->save_state();
 				}
 
-				uint32_t size_with_sequential_selection = get_animated_data_size(segment, rotation_selections, translation_selections);
+				uint32_t size_with_sequential_selection = get_animated_data_size(segment, rotation_selections, translation_selections, scale_selections);
 
 				// Now try assigning control points more distant from already tried points; occasionally this beats the prior method.
-				reset_control_point_choices(segment, rotation_selections, translation_selections);
+				reset_control_point_choices(segment, rotation_selections, translation_selections, scale_selections);
 
 				uint32_t step = segment.num_samples / 2;
 				while (step >= 1)
 				{
 					for (uint32_t sample_index = NUM_LEFT_AUXILIARY_POINTS + 1; sample_index <= segment.num_samples - 1 - (NUM_RIGHT_AUXILIARY_POINTS + 1); sample_index += step)
 					{
-						try_control_points_at(allocator, skeleton, segment, sample_index, rotation_selections, translation_selections,
-							error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose, modified_rotation_selections, modified_translation_selections);
+						try_control_points_at(allocator, skeleton, segment, sample_index, rotation_selections, translation_selections, scale_selections,
+							error_per_bone, error_per_stream, raw_local_pose, lossy_local_pose, modified_rotation_selections, modified_translation_selections, modified_scale_selections);
 
-						rewind_to_first_affected_sample(modified_rotation_selections, modified_translation_selections, sample_index);
+						rewind_to_first_affected_sample(modified_rotation_selections, modified_translation_selections, modified_scale_selections, sample_index);
 					}
 
 					step >>= 1;
 				}
 
-				uint32_t size_with_maximally_distant_selection = get_animated_data_size(segment, rotation_selections, translation_selections);
+				uint32_t size_with_maximally_distant_selection = get_animated_data_size(segment, rotation_selections, translation_selections, scale_selections);
 
 				if (size_with_maximally_distant_selection > size_with_sequential_selection)
 				{
@@ -828,6 +921,9 @@ namespace acl
 
 						if (translation_selections[bone_index] != nullptr)
 							translation_selections[bone_index]->restore_state();
+
+						if (scale_selections[bone_index] != nullptr)
+							scale_selections[bone_index]->restore_state();
 					}
 				}
 
@@ -845,8 +941,8 @@ namespace acl
 
 			ScopeProfiler compression_time;
 
-			uint16_t num_bones = clip.get_num_bones();
-			uint32_t num_samples = clip.get_num_samples();
+			const uint16_t num_bones = clip.get_num_bones();
+			const uint32_t num_samples = clip.get_num_samples();
 
 			if (ACL_TRY_ASSERT(num_bones > 0, "Clip has no bones!"))
 				return nullptr;
@@ -881,7 +977,7 @@ namespace acl
 			// TODO: Expose this, especially the translation threshold depends on the unit scale.
 			// Centimeters VS meters, a different threshold should be used. Perhaps we should pass an
 			// argument to the compression algorithm that states the units used or we should force centimeters
-			compact_constant_streams(allocator, clip_context, 0.00001f, 0.001f);
+			compact_constant_streams(allocator, clip_context, 0.00001f, 0.001f, 0.00001f);
 
 			if (settings.segmenting.enabled)
 			{
@@ -911,16 +1007,19 @@ namespace acl
 				normalize_segment_streams(clip_context, settings.range_reduction);
 			}
 
-			quantize_streams(allocator, clip_context, settings.rotation_format, settings.translation_format, clip, skeleton, raw_clip_context);
+			quantize_streams(allocator, clip_context, settings.rotation_format, settings.translation_format, settings.scale_format, clip, skeleton, raw_clip_context);
 
 			uint32_t num_selections = clip_context.num_segments * clip_context.num_bones;
 			Selections** rotation_selections = allocate_type_array<Selections*>(allocator, num_selections);
 			Selections** translation_selections = allocate_type_array<Selections*>(allocator, num_selections);
+			Selections** scale_selections = allocate_type_array<Selections*>(allocator, num_selections);
 
+			// TODO: std::fill
 			for (uint32_t selections_index = 0; selections_index < num_selections; ++selections_index)
 			{
 				rotation_selections[selections_index] = nullptr;
 				translation_selections[selections_index] = nullptr;
+				scale_selections[selections_index] = nullptr;
 			}
 
 			for (uint16_t segment_index = 0; segment_index < clip_context.num_segments; ++segment_index)
@@ -929,6 +1028,7 @@ namespace acl
 
 				Selections** segment_rotation_selections = rotation_selections + segment_index * clip_context.num_bones;
 				Selections** segment_translation_selections = translation_selections + segment_index * clip_context.num_bones;
+				Selections** segment_scale_selections = scale_selections + segment_index * clip_context.num_bones;
 
 				for (uint16_t bone_index = 0; bone_index < clip_context.num_bones; ++bone_index)
 				{
@@ -939,22 +1039,23 @@ namespace acl
 
 					if (bone_streams.is_translation_animated() && !is_pack_0_bit_rate(bone_streams.translations.get_bit_rate()))
 						segment_translation_selections[bone_index] = allocate_type<Selections>(allocator, allocator, segment.num_samples);
+
+					if (bone_streams.is_scale_animated() && !is_pack_0_bit_rate(bone_streams.scales.get_bit_rate()))
+						segment_scale_selections[bone_index] = allocate_type<Selections>(allocator, allocator, segment.num_samples);
 				}
 
-				choose_control_points(allocator, skeleton, segment, segment_rotation_selections, segment_translation_selections);
+				choose_control_points(allocator, skeleton, segment, segment_rotation_selections, segment_translation_selections, segment_scale_selections);
 			}
 
-			const SegmentContext& clip_segment = clip_context.segments[0];
+			const uint32_t constant_data_size = get_constant_data_size(clip_context);
 
-			uint32_t constant_data_size = get_constant_data_size(clip_context);
+			calculate_animated_data_size(clip_context, rotation_selections, translation_selections, scale_selections);
 
-			for (SegmentContext& segment : clip_context.segment_iterator())
-				segment.animated_data_size = get_animated_data_size(segment, rotation_selections, translation_selections);
+			const uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format, settings.scale_format);
 
-			uint32_t format_per_track_data_size = get_format_per_track_data_size(clip_context, settings.rotation_format, settings.translation_format);
-
-			uint32_t num_tracks = num_bones * Constants::NUM_TRACKS_PER_BONE;
-			uint32_t bitset_size = get_bitset_size(num_tracks);
+			const uint32_t num_tracks_per_bone = clip_context.has_scale ? 3 : 2;
+			const uint32_t num_tracks = uint32_t(num_bones) * num_tracks_per_bone;
+			const uint32_t bitset_size = get_bitset_size(num_tracks);
 
 			uint32_t buffer_size = 0;
 
@@ -962,36 +1063,38 @@ namespace acl
 			buffer_size += sizeof(CompressedClip);
 			buffer_size += sizeof(ClipHeader);
 			buffer_size += sizeof(SegmentHeader) * clip_context.num_segments;	// Segment headers
-			buffer_size += sizeof(uint32_t) * bitset_size;		// Default tracks bitset
-			buffer_size += sizeof(uint32_t) * bitset_size;		// Constant tracks bitset
-			buffer_size = align_to(buffer_size, 4);				// Align constant track data
-			buffer_size += constant_data_size;					// Constant track data
-			buffer_size = align_to(buffer_size, 4);				// Align range data
-			buffer_size += clip_range_data_size;				// Range data
+			buffer_size += sizeof(uint32_t) * bitset_size;						// Default tracks bitset
+			buffer_size += sizeof(uint32_t) * bitset_size;						// Constant tracks bitset
+			buffer_size = align_to(buffer_size, 4);								// Align constant track data
+			buffer_size += constant_data_size;									// Constant track data
+			buffer_size = align_to(buffer_size, 4);								// Align range data
+			buffer_size += clip_range_data_size;								// Range data
 
 			// Per segment data
 			for (const SegmentContext& segment : clip_context.segment_iterator())
 			{
-				buffer_size += format_per_track_data_size;			// Format per track data
-				buffer_size = align_to(buffer_size, 2);				// Align range data
-				buffer_size += segment.range_data_size;				// Range data
-				buffer_size = align_to(buffer_size, 4);				// Align animated data
-				buffer_size += segment.animated_data_size;			// Animated track data
+				buffer_size += format_per_track_data_size;						// Format per track data
+				buffer_size = align_to(buffer_size, 2);							// Align range data
+				buffer_size += segment.range_data_size;							// Range data
+				buffer_size = align_to(buffer_size, 4);							// Align animated data
+				buffer_size += segment.animated_data_size;						// Animated track data
 			}
 
 			printf("total size %d\n", buffer_size);
 
 			uint8_t* buffer = allocate_type_array_aligned<uint8_t>(allocator, buffer_size, 16);
 
-			CompressedClip* compressed_clip = make_compressed_clip(buffer, buffer_size, AlgorithmType8::UniformlySampled);
+			CompressedClip* compressed_clip = make_compressed_clip(buffer, buffer_size, AlgorithmType8::SplineKeyReduction);
 
 			ClipHeader& header = get_clip_header(*compressed_clip);
 			header.num_bones = num_bones;
 			header.num_segments = clip_context.num_segments;
 			header.rotation_format = settings.rotation_format;
 			header.translation_format = settings.translation_format;
+			header.scale_format = settings.scale_format;
 			header.clip_range_reduction = settings.range_reduction;
 			header.segment_range_reduction = settings.segmenting.range_reduction;
+			header.has_scale = clip_context.has_scale ? 1 : 0;
 			header.num_samples = num_samples;
 			header.sample_rate = clip.get_sample_rate();
 			header.segment_headers_offset = sizeof(ClipHeader);
@@ -1000,7 +1103,7 @@ namespace acl
 			header.constant_track_data_offset = align_to(header.constant_tracks_bitset_offset + (sizeof(uint32_t) * bitset_size), 4);	// Aligned to 4 bytes
 			header.clip_range_data_offset = align_to(header.constant_track_data_offset + constant_data_size, 4);						// Aligned to 4 bytes
 
-			uint16_t segment_headers_start_offset = header.clip_range_data_offset + clip_range_data_size;
+			const uint16_t segment_headers_start_offset = safe_static_cast<uint16_t>(header.clip_range_data_offset + clip_range_data_size);
 			impl::write_segment_headers(clip_context, settings, header.get_segment_headers(), segment_headers_start_offset);
 
 			write_default_track_bitset(clip_context, header.get_default_tracks_bitset(), bitset_size);
@@ -1012,11 +1115,11 @@ namespace acl
 				header.constant_track_data_offset = InvalidPtrOffset();
 
 			if (settings.range_reduction != RangeReductionFlags8::None)
-				write_clip_range_data(clip_segment, settings.range_reduction, header.get_clip_range_data(), clip_range_data_size);
+				write_clip_range_data(clip_context, settings.range_reduction, header.get_clip_range_data(), clip_range_data_size);
 			else
 				header.clip_range_data_offset = InvalidPtrOffset();
 
-			write_segment_data(allocator, clip_context, settings, header, rotation_selections, translation_selections);
+			write_segment_data(allocator, clip_context, settings, header, rotation_selections, translation_selections, scale_selections);
 
 			finalize_compressed_clip(*compressed_clip);
 
@@ -1024,10 +1127,12 @@ namespace acl
 			{
 				deallocate_type(allocator, rotation_selections[selections_index]);
 				deallocate_type(allocator, translation_selections[selections_index]);
+				deallocate_type(allocator, scale_selections[selections_index]);
 			}
 
 			deallocate_type_array(allocator, rotation_selections, num_selections);
 			deallocate_type_array(allocator, translation_selections, num_selections);
+			deallocate_type_array(allocator, scale_selections, num_selections);
 
 			compression_time.stop();
 
@@ -1038,7 +1143,7 @@ namespace acl
 
 			if (stats.get_logging() != StatLogging::None)
 			{
-				uint32_t raw_size = clip.get_total_size();
+				uint32_t raw_size = clip.get_raw_size();
 				uint32_t compressed_size = compressed_clip->get_size();
 				double compression_ratio = double(raw_size) / double(compressed_size);
 
@@ -1065,11 +1170,12 @@ namespace acl
 				};
 
 				// Use the compressed clip to make sure the decoder works properly
-				BoneError error = calculate_compressed_clip_error(allocator, clip, skeleton, alloc_ctx_fun, free_ctx_fun, sample_fun);
+				BoneError error = calculate_compressed_clip_error(allocator, clip, skeleton, clip_context.has_scale, alloc_ctx_fun, free_ctx_fun, sample_fun);
 
 				SJSONObjectWriter& writer = stats.get_writer();
 				writer["algorithm_name"] = get_algorithm_name(AlgorithmType8::SplineKeyReduction);
 				writer["algorithm_uid"] = settings.hash();
+				writer["clip_name"] = clip.get_name().c_str();
 				writer["raw_size"] = raw_size;
 				writer["compressed_size"] = compressed_size;
 				writer["compression_ratio"] = compression_ratio;
@@ -1081,7 +1187,9 @@ namespace acl
 				writer["num_samples"] = clip.get_num_samples();
 				writer["rotation_format"] = get_rotation_format_name(settings.rotation_format);
 				writer["translation_format"] = get_vector_format_name(settings.translation_format);
+				writer["scale_format"] = get_vector_format_name(settings.scale_format); 
 				writer["range_reduction"] = get_range_reduction_name(settings.range_reduction);
+				writer["has_scale"] = clip_context.has_scale;
 
 				if (stats.get_logging() == StatLogging::Detailed)
 				{

@@ -309,12 +309,12 @@ namespace acl
 				normalize_translation_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
 				clip_context.are_translations_normalized = true;
 			}
-		}
 
-		if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Scales))
-		{
-			normalize_scale_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
-			clip_context.are_scales_normalized = true;
+			if (is_enum_flag_set(range_reduction, RangeReductionFlags8::Scales))
+			{
+				normalize_scale_streams(segment.bone_streams, clip_context.ranges, segment.num_bones);
+				clip_context.are_scales_normalized = true;
+			}
 		}
 	}
 

@@ -37,11 +37,6 @@ namespace acl
 	{
 		namespace impl
 		{
-			struct Constants
-			{
-				static constexpr uint32_t NUM_TRACKS_PER_BONE = 2;
-			};
-
 			struct FrameHeader
 			{
 				// TODO: reallocate a bit to indicate that all bones have data, in which case bones_having_data[] will have zero elements.
@@ -70,10 +65,10 @@ namespace acl
 
 				void set_next_frame_offset(uint32_t length)
 				{
-					ACL_ENSURE(length & 3 == 0, "Offset %d to the next frame is not a multiple of 4", length);
+					ACL_ENSURE((length & 3) == 0, "Offset %d to the next frame is not a multiple of 4", length);
 					uint32_t num_32_bit_words = length >> 2;
 
-					ACL_ENSURE(num_32_bit_words & (NEXT_FRAME_OFFSET_MASK >> NEXT_FRAME_OFFSET_SHIFT) == num_32_bit_words, "Frame length %d is too large to store", length);
+					ACL_ENSURE((num_32_bit_words & (NEXT_FRAME_OFFSET_MASK >> NEXT_FRAME_OFFSET_SHIFT)) == num_32_bit_words, "Frame length %d is too large to store", length);
 
 					frame_type_and_offsets &= ~NEXT_FRAME_OFFSET_MASK;
 					frame_type_and_offsets |= num_32_bit_words << NEXT_FRAME_OFFSET_SHIFT;
@@ -83,10 +78,10 @@ namespace acl
 
 				void set_previous_frame_offset(uint32_t length)
 				{
-					ACL_ENSURE(length & 3 == 0, "Offset %d to the previous frame is not a multiple of 4", length);
+					ACL_ENSURE((length & 3) == 0, "Offset %d to the previous frame is not a multiple of 4", length);
 					uint32_t num_32_bit_words = length >> 2;
 
-					ACL_ENSURE(num_32_bit_words & (PREVIOUS_FRAME_OFFSET_MASK >> PREVIOUS_FRAME_OFFSET_SHIFT) == num_32_bit_words, "Previous frame length %d is too large to store", length);
+					ACL_ENSURE((num_32_bit_words & (PREVIOUS_FRAME_OFFSET_MASK >> PREVIOUS_FRAME_OFFSET_SHIFT)) == num_32_bit_words, "Previous frame length %d is too large to store", length);
 
 					frame_type_and_offsets &= ~PREVIOUS_FRAME_OFFSET_MASK;
 					frame_type_and_offsets |= num_32_bit_words << PREVIOUS_FRAME_OFFSET_SHIFT;
@@ -96,7 +91,7 @@ namespace acl
 				{
 					uint32_t bitset_size = get_bitset_size(num_bones);
 					uint32_t num_bones_having_data = bitset_count_set_bits(bones_having_data, bitset_size);
-					const float* knots = safe_ptr_cast<float, const uint8_t*>(reinterpret_cast<const uint8_t*>(this) + get_next_frame_offset() - num_bones_having_data * sizeof(float));
+					return safe_ptr_cast<float, const uint8_t*>(reinterpret_cast<const uint8_t*>(this) + get_next_frame_offset() - num_bones_having_data * sizeof(float));
 				}
 			};
 
@@ -118,10 +113,16 @@ namespace acl
 			{
 				uint16_t				num_bones;
 				uint16_t				num_segments;
+
 				RotationFormat8			rotation_format;
 				VectorFormat8			translation_format;
+				VectorFormat8			scale_format;								// TODO: Make this optional?
+				
 				RangeReductionFlags8	clip_range_reduction;
 				RangeReductionFlags8	segment_range_reduction;
+				
+				uint8_t					has_scale;
+
 				uint32_t				num_samples;
 				uint32_t				sample_rate;								// TODO: Store duration as float instead
 
