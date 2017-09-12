@@ -1,3 +1,5 @@
+#define SPLINE 1
+
 ////////////////////////////////////////////////////////////////////////////////
 // The MIT License (MIT)
 //
@@ -34,6 +36,7 @@
 #include "acl/algorithm/uniformly_sampled/algorithm.h"
 
 #include <conio.h>
+
 #include <cstring>
 #include <cstdio>
 #include <fstream>
@@ -196,13 +199,14 @@ static void try_algorithm(const Options& options, Allocator& allocator, const An
 		OutputStats stats(logging, stats_writer);
 		CompressedClip* compressed_clip = algorithm.compress_clip(allocator, clip, skeleton, stats);
 
+#if !SPLINE
 		ACL_ENSURE(compressed_clip->is_valid(true), "Compressed clip is invalid");
 
 		unit_test(allocator, clip, skeleton, *compressed_clip, algorithm);
 
 		allocator.deallocate(compressed_clip, compressed_clip->get_size());
 	};
-
+#endif
 	if (runs_writer != nullptr)
 		runs_writer->push_object([&](SJSONObjectWriter& writer) { try_algorithm_impl(&writer); });
 	else
@@ -285,6 +289,8 @@ static int main_impl(int argc, char** argv)
 		{
 			bool use_segmenting = use_segmenting_options[segmenting_option_index];
 
+			printf("\nUse segmenting: %s\n", use_segmenting ? "yes" : "no");
+
 #if SPLINE
 			SplineKeyReductionAlgorithm spline_tests[] =
 			{
@@ -292,18 +298,15 @@ static int main_impl(int argc, char** argv)
 				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
 				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
 				SplineKeyReductionAlgorithm(RotationFormat8::Quat_128, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
-				
 				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::None, use_segmenting),
 				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations, use_segmenting),
 				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Translations, use_segmenting),
 				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_96, VectorFormat8::Vector3_96, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
-				
 				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Translations, use_segmenting),
 				SplineKeyReductionAlgorithm(RotationFormat8::QuatDropW_Variable, VectorFormat8::Vector3_Variable, RangeReductionFlags8::Rotations | RangeReductionFlags8::Translations, use_segmenting),
 			};
 
 			for (IAlgorithm& algorithm : spline_tests)
-				try_algorithm(options, allocator, *clip.get(), *skeleton.get(), algorithm, logging, runs_writer);
 #else
 			UniformlySampledAlgorithm uniform_tests[] =
 			{

@@ -27,6 +27,7 @@
 #include "acl/algorithm/spline_key_reduction/encoder.h"
 #include "acl/algorithm/spline_key_reduction/decoder.h"
 #include "acl/core/enum_utils.h"
+#include "acl/core/hash.h"
 #include "acl/core/ialgorithm.h"
 #include "acl/core/memory.h"
 #include "acl/decompression/default_output_writer.h"
@@ -82,6 +83,11 @@ namespace acl
 		{
 			//spline_key_reduction::DecompressionSettings compression_settings;
 			//spline_key_reduction::decompress_bone(compression_settings, clip, context, sample_time, sample_bone_index, out_rotation, out_translation, out_scale);
+		}
+
+		virtual void print_stats(const CompressedClip& clip, std::FILE* file) override
+		{
+			spline_key_reduction::print_stats(clip, file, m_compression_settings);
 		}
 
 		virtual uint32_t get_uid() const override

@@ -300,6 +300,17 @@ namespace acl
 			}
 		}
 
+		const TrackStream& get_track_stream(AnimationTrackType8 track_type) const
+		{
+			switch (track_type)
+			{
+			case AnimationTrackType8::Rotation:
+				return rotations;
+			case AnimationTrackType8::Translation:
+				return translations;
+			}
+		}
+
 		bool is_rotation_constant;
 		bool is_rotation_default;
 		bool is_translation_constant;

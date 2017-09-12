@@ -37,6 +37,17 @@ namespace acl
 	{
 		namespace impl
 		{
+			struct Constants
+			{
+				static constexpr uint32_t NUM_TRACKS_PER_BONE = 2;
+
+				static constexpr uint32_t LAST_FRAME_LENGTH_LOW_BIT		=  0;
+				static constexpr uint32_t LAST_FRAME_LENGTH_HIGH_BIT	= 14;
+				static constexpr uint32_t FRAME_LENGTH_LOW_BIT			= 15;
+				static constexpr uint32_t FRAME_LENGTH_HIGH_BIT			= 29;
+				static constexpr uint32_t FRAME_TYPE_LOW_BIT			= 30;
+			};
+
 			struct FrameHeader
 			{
 				// TODO: reallocate a bit to indicate that all bones have data, in which case bones_having_data[] will have zero elements.
@@ -100,6 +111,7 @@ namespace acl
 			struct SegmentHeader
 			{
 				uint32_t				num_samples;
+				uint32_t				animated_pose_bit_size;						// TODO: Calculate from bitsets and formats?
 
 				// TODO: Only need one offset, calculate the others from the information we have?
 				PtrOffset32<uint8_t>	format_per_track_data_offset;				// TODO: Make this offset optional? Only present if variable
