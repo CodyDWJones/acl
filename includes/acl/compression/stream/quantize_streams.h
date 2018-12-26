@@ -127,9 +127,8 @@ namespace acl
 			ACL_ASSERT(raw_stream.get_sample_size() == sizeof(Vector4_32), "Unexpected rotation sample size. %u != %u", raw_stream.get_sample_size(), sizeof(Vector4_32));
 
 			const uint32_t num_samples = raw_stream.get_num_samples();
-			const uint32_t rotation_sample_size = get_packed_rotation_size(rotation_format);
-			const uint32_t sample_rate = raw_stream.get_sample_rate();
-			RotationTrackStream quantized_stream(allocator, num_samples, rotation_sample_size, sample_rate, rotation_format);
+
+			RotationTrackStream quantized_stream(allocator, num_samples, get_packed_rotation_size(rotation_format), raw_stream.get_sample_rate(), rotation_format, raw_stream.is_constant(), raw_stream.is_default());
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -170,10 +169,10 @@ namespace acl
 			BoneStreams& bone_stream = context.bone_streams[bone_index];
 
 			// Default tracks aren't quantized
-			if (bone_stream.is_rotation_default)
+			if (bone_stream.rotations.are_default())
 				return;
 
-			const bool are_rotations_normalized = context.clip.are_rotations_normalized && !bone_stream.is_rotation_constant;
+			const bool are_rotations_normalized = context.clip.are_rotations_normalized && !bone_stream.rotations.are_constant();
 			quantize_fixed_rotation_stream(context.allocator, bone_stream.rotations, rotation_format, are_rotations_normalized, bone_stream.rotations);
 		}
 
@@ -184,8 +183,8 @@ namespace acl
 
 			const uint32_t num_samples = is_constant_bit_rate(bit_rate) ? 1 : raw_segment_stream.get_num_samples();
 			const uint32_t sample_size = sizeof(uint64_t) * 2;
-			const uint32_t sample_rate = raw_segment_stream.get_sample_rate();
-			RotationTrackStream quantized_stream(context.allocator, num_samples, sample_size, sample_rate, RotationFormat8::QuatDropW_Variable, bit_rate);
+
+			RotationTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), RotationFormat8::QuatDropW_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), bit_rate);
 
 			if (is_constant_bit_rate(bit_rate))
 			{
@@ -234,17 +233,17 @@ namespace acl
 			BoneStreams& bone_stream = context.bone_streams[bone_index];
 
 			// Default tracks aren't quantized
-			if (bone_stream.is_rotation_default)
+			if (bone_stream.rotations.are_default())
 				return;
 
 			const BoneStreams& raw_bone_stream = context.raw_bone_streams[bone_index];
 			const RotationFormat8 highest_bit_rate = get_highest_variant_precision(RotationVariant8::QuatDropW);
 			const TrackStreamRange invalid_range;
 			const TrackStreamRange& bone_range = context.clip.are_rotations_normalized ? context.clip.ranges[bone_index].rotation : invalid_range;
-			const bool are_rotations_normalized = context.clip.are_rotations_normalized && !bone_stream.is_rotation_constant;
+			const bool are_rotations_normalized = context.clip.are_rotations_normalized && !bone_stream.rotations.are_constant();
 
 			// If our format is variable, we keep them fixed at the highest bit rate in the variant
-			if (bone_stream.is_rotation_constant)
+			if (bone_stream.rotations.are_constant())
 				quantize_fixed_rotation_stream(context.allocator, bone_stream.rotations, highest_bit_rate, are_rotations_normalized, bone_stream.rotations);
 			else
 				quantize_variable_rotation_stream(context, raw_bone_stream.rotations, bone_stream.rotations, bone_range, bit_rate, are_rotations_normalized, bone_stream.rotations);
@@ -257,9 +256,8 @@ namespace acl
 			ACL_ASSERT(raw_stream.get_vector_format() == VectorFormat8::Vector3_96, "Expected a Vector3_96 vector format, found: %s", get_vector_format_name(raw_stream.get_vector_format()));
 
 			const uint32_t num_samples = raw_stream.get_num_samples();
-			const uint32_t sample_size = get_packed_vector_size(translation_format);
-			const uint32_t sample_rate = raw_stream.get_sample_rate();
-			TranslationTrackStream quantized_stream(allocator, num_samples, sample_size, sample_rate, translation_format);
+
+			TranslationTrackStream quantized_stream(allocator, num_samples, get_packed_vector_size(translation_format), raw_stream.get_sample_rate(), translation_format, raw_stream.is_constant(), raw_stream.is_default());
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -294,11 +292,11 @@ namespace acl
 			BoneStreams& bone_stream = context.bone_streams[bone_index];
 
 			// Default tracks aren't quantized
-			if (bone_stream.is_translation_default)
+			if (bone_stream.translations.are_default())
 				return;
 
 			// Constant translation tracks store the remaining sample with full precision
-			const VectorFormat8 format = bone_stream.is_translation_constant ? VectorFormat8::Vector3_96 : translation_format;
+			const VectorFormat8 format = bone_stream.translations.are_constant() ? VectorFormat8::Vector3_96 : translation_format;
 
 			quantize_fixed_translation_stream(context.allocator, bone_stream.translations, format, bone_stream.translations);
 		}
@@ -311,8 +309,8 @@ namespace acl
 
 			const uint32_t num_samples = is_constant_bit_rate(bit_rate) ? 1 : raw_segment_stream.get_num_samples();
 			const uint32_t sample_size = sizeof(uint64_t) * 2;
-			const uint32_t sample_rate = raw_segment_stream.get_sample_rate();
-			TranslationTrackStream quantized_stream(context.allocator, num_samples, sample_size, sample_rate, VectorFormat8::Vector3_Variable, bit_rate);
+
+			TranslationTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), VectorFormat8::Vector3_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), bit_rate);
 
 			if (is_constant_bit_rate(bit_rate))
 			{
@@ -353,7 +351,7 @@ namespace acl
 			BoneStreams& bone_stream = context.bone_streams[bone_index];
 
 			// Default tracks aren't quantized
-			if (bone_stream.is_translation_default)
+			if (bone_stream.translations.are_default())
 				return;
 
 			const TrackStreamRange invalid_range;
@@ -361,7 +359,7 @@ namespace acl
 			const BoneStreams& raw_bone_stream = context.raw_bone_streams[bone_index];
 
 			// Constant translation tracks store the remaining sample with full precision
-			if (bone_stream.is_translation_constant)
+			if (bone_stream.translations.are_constant())
 				quantize_fixed_translation_stream(context.allocator, bone_stream.translations, VectorFormat8::Vector3_96, bone_stream.translations);
 			else
 				quantize_variable_translation_stream(context, raw_bone_stream.translations, bone_stream.translations, bone_range, bit_rate, bone_stream.translations);
@@ -374,9 +372,8 @@ namespace acl
 			ACL_ASSERT(raw_stream.get_vector_format() == VectorFormat8::Vector3_96, "Expected a Vector3_96 vector format, found: %s", get_vector_format_name(raw_stream.get_vector_format()));
 
 			const uint32_t num_samples = raw_stream.get_num_samples();
-			const uint32_t sample_size = get_packed_vector_size(scale_format);
-			const uint32_t sample_rate = raw_stream.get_sample_rate();
-			ScaleTrackStream quantized_stream(allocator, num_samples, sample_size, sample_rate, scale_format);
+
+			ScaleTrackStream quantized_stream(allocator, num_samples, get_packed_vector_size(scale_format), raw_stream.get_sample_rate(), scale_format, raw_stream.is_constant(), raw_stream.is_default());
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -411,11 +408,11 @@ namespace acl
 			BoneStreams& bone_stream = context.bone_streams[bone_index];
 
 			// Default tracks aren't quantized
-			if (bone_stream.is_scale_default)
+			if (bone_stream.scales.are_default())
 				return;
 
 			// Constant scale tracks store the remaining sample with full precision
-			const VectorFormat8 format = bone_stream.is_scale_constant ? VectorFormat8::Vector3_96 : scale_format;
+			const VectorFormat8 format = bone_stream.scales.are_constant() ? VectorFormat8::Vector3_96 : scale_format;
 
 			quantize_fixed_scale_stream(context.allocator, bone_stream.scales, format, bone_stream.scales);
 		}
@@ -428,8 +425,8 @@ namespace acl
 
 			const uint32_t num_samples = is_constant_bit_rate(bit_rate) ? 1 : raw_segment_stream.get_num_samples();
 			const uint32_t sample_size = sizeof(uint64_t) * 2;
-			const uint32_t sample_rate = raw_segment_stream.get_sample_rate();
-			ScaleTrackStream quantized_stream(context.allocator, num_samples, sample_size, sample_rate, VectorFormat8::Vector3_Variable, bit_rate);
+
+			ScaleTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), VectorFormat8::Vector3_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), bit_rate);
 
 			if (is_constant_bit_rate(bit_rate))
 			{
@@ -470,7 +467,7 @@ namespace acl
 			BoneStreams& bone_stream = context.bone_streams[bone_index];
 
 			// Default tracks aren't quantized
-			if (bone_stream.is_scale_default)
+			if (bone_stream.scales.are_default())
 				return;
 
 			const TrackStreamRange invalid_range;
@@ -478,7 +475,7 @@ namespace acl
 			const BoneStreams& raw_bone_stream = context.raw_bone_streams[bone_index];
 
 			// Constant scale tracks store the remaining sample with full precision
-			if (bone_stream.is_scale_constant)
+			if (bone_stream.scales.are_constant())
 				quantize_fixed_scale_stream(context.allocator, bone_stream.scales, VectorFormat8::Vector3_96, bone_stream.scales);
 			else
 				quantize_variable_scale_stream(context, raw_bone_stream.scales, bone_stream.scales, bone_range, bit_rate, bone_stream.scales);
@@ -807,19 +804,19 @@ namespace acl
 				BoneBitRate& bone_bit_rate = out_bit_rate_per_bone[bone_index];
 
 				const bool rotation_supports_constant_tracks = segment.are_rotations_normalized;
-				if (is_rotation_variable && segment.bone_streams[bone_index].is_rotation_animated())
+				if (is_rotation_variable && segment.bone_streams[bone_index].rotations.are_animated())
 					bone_bit_rate.rotation = rotation_supports_constant_tracks ? 0 : k_lowest_bit_rate;
 				else
 					bone_bit_rate.rotation = k_invalid_bit_rate;
 
 				const bool translation_supports_constant_tracks = segment.are_translations_normalized;
-				if (is_translation_variable && segment.bone_streams[bone_index].is_translation_animated())
+				if (is_translation_variable && segment.bone_streams[bone_index].translations.are_animated())
 					bone_bit_rate.translation = translation_supports_constant_tracks ? 0 : k_lowest_bit_rate;
 				else
 					bone_bit_rate.translation = k_invalid_bit_rate;
 
 				const bool scale_supports_constant_tracks = segment.are_scales_normalized;
-				if (has_scale && is_scale_variable && segment.bone_streams[bone_index].is_scale_animated())
+				if (has_scale && is_scale_variable && segment.bone_streams[bone_index].scales.are_animated())
 					bone_bit_rate.scale = scale_supports_constant_tracks ? 0 : k_lowest_bit_rate;
 				else
 					bone_bit_rate.scale = k_invalid_bit_rate;

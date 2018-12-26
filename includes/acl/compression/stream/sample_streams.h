@@ -253,7 +253,7 @@ namespace acl
 	{
 		const SegmentContext* segment = bone_steams.segment;
 		const ClipContext* clip_context = segment->clip;
-		const bool are_rotations_normalized = clip_context->are_rotations_normalized && !bone_steams.is_rotation_constant;
+		const bool are_rotations_normalized = clip_context->are_rotations_normalized && !bone_steams.rotations.are_constant();
 		const uint8_t* quantized_ptr = bone_steams.rotations.get_raw_sample_ptr(sample_index);
 		const RotationFormat8 format = bone_steams.rotations.get_rotation_format();
 
@@ -421,7 +421,7 @@ namespace acl
 	{
 		const SegmentContext* segment = bone_steams.segment;
 		const ClipContext* clip_context = segment->clip;
-		const bool are_translations_normalized = clip_context->are_translations_normalized && !bone_steams.is_translation_constant;
+		const bool are_translations_normalized = clip_context->are_translations_normalized && !bone_steams.translations.are_constant();
 		const uint8_t* quantized_ptr = bone_steams.translations.get_raw_sample_ptr(sample_index);
 		const VectorFormat8 format = bone_steams.translations.get_vector_format();
 
@@ -581,7 +581,7 @@ namespace acl
 	{
 		const SegmentContext* segment = bone_steams.segment;
 		const ClipContext* clip_context = segment->clip;
-		const bool are_scales_normalized = clip_context->are_scales_normalized && !bone_steams.is_scale_constant;
+		const bool are_scales_normalized = clip_context->are_scales_normalized && !bone_steams.scales.are_constant();
 		const uint8_t* quantized_ptr = bone_steams.scales.get_raw_sample_ptr(sample_index);
 		const VectorFormat8 format = bone_steams.scales.get_vector_format();
 
@@ -672,9 +672,9 @@ namespace acl
 			const BoneStreams& bone_stream = bone_streams[bone_index];
 
 			Quat_32 rotation;
-			if (bone_stream.is_rotation_default)
+			if (bone_stream.rotations.are_default())
 				rotation = default_rotation;
-			else if (bone_stream.is_rotation_constant || is_constant_bit_rate(bone_stream.rotations.get_bit_rate()))
+			else if (bone_stream.rotations.are_constant() || is_constant_bit_rate(bone_stream.rotations.get_bit_rate()))
 				rotation = get_rotation_sample(bone_stream, 0);
 			else
 			{
@@ -692,9 +692,9 @@ namespace acl
 			}
 
 			Vector4_32 translation;
-			if (bone_stream.is_translation_default)
+			if (bone_stream.translations.are_default())
 				translation = default_translation;
-			else if (bone_stream.is_translation_constant || is_constant_bit_rate(bone_stream.translations.get_bit_rate()))
+			else if (bone_stream.translations.are_constant() || is_constant_bit_rate(bone_stream.translations.get_bit_rate()))
 				translation = get_translation_sample(bone_stream, 0);
 			else
 			{
@@ -712,9 +712,9 @@ namespace acl
 			}
 
 			Vector4_32 scale;
-			if (bone_stream.is_scale_default)
+			if (bone_stream.scales.are_default())
 				scale = default_scale;
-			else if (bone_stream.is_scale_constant || is_constant_bit_rate(bone_stream.scales.get_bit_rate()))
+			else if (bone_stream.scales.are_constant() || is_constant_bit_rate(bone_stream.scales.get_bit_rate()))
 				scale = get_scale_sample(bone_stream, 0);
 			else
 			{
@@ -776,9 +776,9 @@ namespace acl
 			const BoneStreams& bone_stream = bone_streams[current_bone_index];
 
 			Quat_32 rotation;
-			if (bone_stream.is_rotation_default)
+			if (bone_stream.rotations.are_default())
 				rotation = default_rotation;
-			else if (bone_stream.is_rotation_constant)
+			else if (bone_stream.rotations.are_constant())
 				rotation = get_rotation_sample(bone_stream, 0);
 			else
 			{
@@ -796,9 +796,9 @@ namespace acl
 			}
 
 			Vector4_32 translation;
-			if (bone_stream.is_translation_default)
+			if (bone_stream.translations.are_default())
 				translation = default_translation;
-			else if (bone_stream.is_translation_constant)
+			else if (bone_stream.translations.are_constant())
 				translation = get_translation_sample(bone_stream, 0);
 			else
 			{
@@ -816,9 +816,9 @@ namespace acl
 			}
 
 			Vector4_32 scale;
-			if (bone_stream.is_scale_default)
+			if (bone_stream.scales.are_default())
 				scale = default_scale;
-			else if (bone_stream.is_scale_constant)
+			else if (bone_stream.scales.are_constant())
 				scale = get_scale_sample(bone_stream, 0);
 			else
 			{
@@ -882,9 +882,9 @@ namespace acl
 			const BoneStreams& raw_bone_stream = raw_bone_steams[bone_index];
 
 			Quat_32 rotation;
-			if (bone_stream.is_rotation_default)
+			if (bone_stream.rotations.are_default())
 				rotation = default_rotation;
-			else if (bone_stream.is_rotation_constant)
+			else if (bone_stream.rotations.are_constant())
 			{
 				if (is_rotation_variable)
 					rotation = get_rotation_sample(bone_stream, 0);
@@ -920,9 +920,9 @@ namespace acl
 			}
 
 			Vector4_32 translation;
-			if (bone_stream.is_translation_default)
+			if (bone_stream.translations.are_default())
 				translation = default_translation;
-			else if (bone_stream.is_translation_constant)
+			else if (bone_stream.translations.are_constant())
 				translation = get_translation_sample(bone_stream, 0, VectorFormat8::Vector3_96);
 			else
 			{
@@ -953,9 +953,9 @@ namespace acl
 			}
 
 			Vector4_32 scale;
-			if (bone_stream.is_scale_default)
+			if (bone_stream.scales.are_default())
 				scale = default_scale;
-			else if (bone_stream.is_scale_constant)
+			else if (bone_stream.scales.are_constant())
 				scale = get_scale_sample(bone_stream, 0, VectorFormat8::Vector3_96);
 			else
 			{
@@ -1034,9 +1034,9 @@ namespace acl
 			const BoneStreams& raw_bone_stream = raw_bone_steams[current_bone_index];
 
 			Quat_32 rotation;
-			if (bone_stream.is_rotation_default)
+			if (bone_stream.rotations.are_default())
 				rotation = default_rotation;
-			else if (bone_stream.is_rotation_constant)
+			else if (bone_stream.rotations.are_constant())
 			{
 				if (is_rotation_variable)
 					rotation = get_rotation_sample(bone_stream, 0);
@@ -1072,9 +1072,9 @@ namespace acl
 			}
 
 			Vector4_32 translation;
-			if (bone_stream.is_translation_default)
+			if (bone_stream.translations.are_default())
 				translation = default_translation;
-			else if (bone_stream.is_translation_constant)
+			else if (bone_stream.translations.are_constant())
 				translation = get_translation_sample(bone_stream, 0, VectorFormat8::Vector3_96);
 			else
 			{
@@ -1105,9 +1105,9 @@ namespace acl
 			}
 
 			Vector4_32 scale;
-			if (bone_stream.is_scale_default)
+			if (bone_stream.scales.are_default())
 				scale = default_scale;
-			else if (bone_stream.is_scale_constant)
+			else if (bone_stream.scales.are_constant())
 				scale = get_scale_sample(bone_stream, 0, VectorFormat8::Vector3_96);
 			else
 			{
@@ -1148,13 +1148,13 @@ namespace acl
 		{
 			const BoneStreams& bone_stream = bone_streams[bone_index];
 
-			const uint32_t rotation_sample_index = bone_stream.is_rotation_animated() ? sample_index : 0;
+			const uint32_t rotation_sample_index = bone_stream.rotations.are_animated() ? sample_index : 0;
 			const Quat_32 rotation = get_rotation_sample(bone_stream, rotation_sample_index);
 
-			const uint32_t translation_sample_index = bone_stream.is_translation_animated() ? sample_index : 0;
+			const uint32_t translation_sample_index = bone_stream.translations.are_animated() ? sample_index : 0;
 			const Vector4_32 translation = get_translation_sample(bone_stream, translation_sample_index);
 
-			const uint32_t scale_sample_index = bone_stream.is_scale_animated() ? sample_index : 0;
+			const uint32_t scale_sample_index = bone_stream.scales.are_animated() ? sample_index : 0;
 			const Vector4_32 scale = get_scale_sample(bone_stream, scale_sample_index);
 
 			out_local_pose[bone_index] = transform_set(rotation, translation, scale);

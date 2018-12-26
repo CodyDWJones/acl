@@ -489,23 +489,23 @@ namespace acl
 
 			for (const BoneStreams& bone_stream : clip_context.segments[0].bone_iterator())
 			{
-				if (bone_stream.is_rotation_default)
+				if (bone_stream.rotations.are_default())
 					num_default_rotation_tracks++;
-				else if (bone_stream.is_rotation_constant)
+				else if (bone_stream.rotations.are_constant())
 					num_constant_rotation_tracks++;
 				else
 					num_animated_rotation_tracks++;
 
-				if (bone_stream.is_translation_default)
+				if (bone_stream.translations.are_default())
 					num_default_translation_tracks++;
-				else if (bone_stream.is_translation_constant)
+				else if (bone_stream.translations.are_constant())
 					num_constant_translation_tracks++;
 				else
 					num_animated_translation_tracks++;
 
-				if (bone_stream.is_scale_default)
+				if (bone_stream.scales.are_default())
 					num_default_scale_tracks++;
-				else if (bone_stream.is_scale_constant)
+				else if (bone_stream.scales.are_constant())
 					num_constant_scale_tracks++;
 				else
 					num_animated_scale_tracks++;

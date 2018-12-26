@@ -112,51 +112,50 @@ namespace acl
 				segment_bone_stream.parent_bone_index = clip_bone_stream.parent_bone_index;
 				segment_bone_stream.output_index = clip_bone_stream.output_index;
 
-				if (!clip_bone_stream.is_rotation_animated())
+				if (!clip_bone_stream.rotations.are_animated())
 				{
 					segment_bone_stream.rotations = clip_bone_stream.rotations.duplicate();
 				}
 				else
 				{
-					uint32_t sample_size = clip_bone_stream.rotations.get_sample_size();
-					RotationTrackStream rotations(allocator, num_samples_in_segment, sample_size, clip_bone_stream.rotations.get_sample_rate(), clip_bone_stream.rotations.get_rotation_format(), clip_bone_stream.rotations.get_bit_rate());
-					memcpy(rotations.get_raw_sample_ptr(0), clip_bone_stream.rotations.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
+					const RotationTrackStream& clip_stream = clip_bone_stream.rotations;
+					const uint32_t sample_size = clip_stream.get_sample_size();
 
-					segment_bone_stream.rotations = std::move(rotations);
+					RotationTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_rotation_format(), clip_stream.are_constant(), clip_stream.are_default(), clip_stream.get_bit_rate());
+					memcpy(segment_stream.get_raw_sample_ptr(0), clip_stream.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
+
+					segment_bone_stream.rotations = std::move(segment_stream);
 				}
 
-				if (!clip_bone_stream.is_translation_animated())
+				if (!clip_bone_stream.translations.are_animated())
 				{
 					segment_bone_stream.translations = clip_bone_stream.translations.duplicate();
 				}
 				else
 				{
-					uint32_t sample_size = clip_bone_stream.translations.get_sample_size();
-					TranslationTrackStream translations(allocator, num_samples_in_segment, sample_size, clip_bone_stream.translations.get_sample_rate(), clip_bone_stream.translations.get_vector_format(), clip_bone_stream.translations.get_bit_rate());
-					memcpy(translations.get_raw_sample_ptr(0), clip_bone_stream.translations.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
+					const TranslationTrackStream& clip_stream = clip_bone_stream.translations;
+					const uint32_t sample_size = clip_stream.get_sample_size();
 
-					segment_bone_stream.translations = std::move(translations);
+					TranslationTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_vector_format(), clip_stream.are_constant(), clip_stream.are_default(), clip_stream.get_bit_rate());
+					memcpy(segment_stream.get_raw_sample_ptr(0), clip_stream.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
+
+					segment_bone_stream.translations = std::move(segment_stream);
 				}
 
-				if (!clip_bone_stream.is_scale_animated())
+				if (!clip_bone_stream.scales.are_animated())
 				{
 					segment_bone_stream.scales = clip_bone_stream.scales.duplicate();
 				}
 				else
 				{
-					uint32_t sample_size = clip_bone_stream.scales.get_sample_size();
-					ScaleTrackStream scales(allocator, num_samples_in_segment, sample_size, clip_bone_stream.scales.get_sample_rate(), clip_bone_stream.scales.get_vector_format(), clip_bone_stream.scales.get_bit_rate());
-					memcpy(scales.get_raw_sample_ptr(0), clip_bone_stream.scales.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
+					const ScaleTrackStream& clip_stream = clip_bone_stream.scales;
+					const uint32_t sample_size = clip_stream.get_sample_size();
 
-					segment_bone_stream.scales = std::move(scales);
+					ScaleTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_vector_format(), clip_stream.are_constant(), clip_stream.are_default(), clip_stream.get_bit_rate());
+					memcpy(segment_stream.get_raw_sample_ptr(0), clip_stream.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
+
+					segment_bone_stream.scales = std::move(segment_stream);
 				}
-
-				segment_bone_stream.is_rotation_constant = clip_bone_stream.is_rotation_constant;
-				segment_bone_stream.is_rotation_default = clip_bone_stream.is_rotation_default;
-				segment_bone_stream.is_translation_constant = clip_bone_stream.is_translation_constant;
-				segment_bone_stream.is_translation_default = clip_bone_stream.is_translation_default;
-				segment_bone_stream.is_scale_constant = clip_bone_stream.is_scale_constant;
-				segment_bone_stream.is_scale_default = clip_bone_stream.is_scale_default;
 			}
 
 			clip_sample_index += num_samples_in_segment;

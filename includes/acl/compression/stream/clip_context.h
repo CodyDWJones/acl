@@ -113,9 +113,16 @@ namespace acl
 			bone_stream.parent_bone_index = skel_bone.parent_index;
 			bone_stream.output_index = bone.output_index;
 
-			bone_stream.rotations = RotationTrackStream(allocator, num_samples, sizeof(Quat_32), sample_rate, RotationFormat8::Quat_128);
-			bone_stream.translations = TranslationTrackStream(allocator, num_samples, sizeof(Vector4_32), sample_rate, VectorFormat8::Vector3_96);
-			bone_stream.scales = ScaleTrackStream(allocator, num_samples, sizeof(Vector4_32), sample_rate, VectorFormat8::Vector3_96);
+			const bool are_constant = num_samples == 1;
+
+			bool are_default = are_constant && quat_near_identity(quat_cast(bone.rotation_track.get_sample(0)), settings.constant_rotation_threshold_angle);
+			bone_stream.rotations = RotationTrackStream(allocator, num_samples, sizeof(Quat_32), sample_rate, RotationFormat8::Quat_128, are_constant, are_default);
+
+			are_default = are_constant && vector_all_near_equal3(vector_cast(bone.translation_track.get_sample(0)), vector_zero_32(), settings.constant_translation_threshold);
+			bone_stream.translations = TranslationTrackStream(allocator, num_samples, sizeof(Vector4_32), sample_rate, VectorFormat8::Vector3_96, are_constant, are_default);
+
+			are_default = are_constant && vector_all_near_equal3(vector_cast(bone.scale_track.get_sample(0)), default_scale, settings.constant_scale_threshold);
+			bone_stream.scales = ScaleTrackStream(allocator, num_samples, sizeof(Vector4_32), sample_rate, VectorFormat8::Vector3_96, are_constant, are_default);
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -129,14 +136,7 @@ namespace acl
 				bone_stream.scales.set_raw_sample(sample_index, scale);
 			}
 
-			bone_stream.is_rotation_constant = num_samples == 1;
-			bone_stream.is_rotation_default = bone_stream.is_rotation_constant && quat_near_identity(quat_cast(bone.rotation_track.get_sample(0)), settings.constant_rotation_threshold_angle);
-			bone_stream.is_translation_constant = num_samples == 1;
-			bone_stream.is_translation_default = bone_stream.is_translation_constant && vector_all_near_equal3(vector_cast(bone.translation_track.get_sample(0)), vector_zero_32(), settings.constant_translation_threshold);
-			bone_stream.is_scale_constant = num_samples == 1;
-			bone_stream.is_scale_default = bone_stream.is_scale_constant && vector_all_near_equal3(vector_cast(bone.scale_track.get_sample(0)), default_scale, settings.constant_scale_threshold);
-
-			has_scale |= !bone_stream.is_scale_default;
+			has_scale |= !bone_stream.scales.are_default();
 
 			if (bone_stream.is_stripped_from_output())
 				out_clip_context.num_output_bones--;

@@ -151,13 +151,13 @@ namespace acl
 				const BoneStreams& bone_stream = segment.bone_streams[bone_index];
 				BoneRanges& bone_range = segment.ranges[bone_index];
 
-				if (bone_stream.is_rotation_animated() && clip_context.are_rotations_normalized)
+				if (bone_stream.rotations.are_animated() && clip_context.are_rotations_normalized)
 					bone_range.rotation = fixup_range(bone_range.rotation);
 
-				if (bone_stream.is_translation_animated() && clip_context.are_translations_normalized)
+				if (bone_stream.translations.are_animated() && clip_context.are_translations_normalized)
 					bone_range.translation = fixup_range(bone_range.translation);
 
-				if (has_scale && bone_stream.is_scale_animated() && clip_context.are_scales_normalized)
+				if (has_scale && bone_stream.scales.are_animated() && clip_context.are_scales_normalized)
 					bone_range.scale = fixup_range(bone_range.scale);
 			}
 		}
@@ -189,7 +189,7 @@ namespace acl
 			ACL_ASSERT(bone_stream.rotations.get_sample_size() == sizeof(Vector4_32), "Unexpected rotation sample size. %u != %u", bone_stream.rotations.get_sample_size(), sizeof(Vector4_32));
 
 			// Constant or default tracks are not normalized
-			if (!bone_stream.is_rotation_animated())
+			if (!bone_stream.rotations.are_animated())
 				continue;
 
 			const uint32_t num_samples = bone_stream.rotations.get_num_samples();
@@ -243,7 +243,7 @@ namespace acl
 			ACL_ASSERT(bone_stream.translations.get_sample_size() == sizeof(Vector4_32), "Unexpected translation sample size. %u != %u", bone_stream.translations.get_sample_size(), sizeof(Vector4_32));
 
 			// Constant or default tracks are not normalized
-			if (!bone_stream.is_translation_animated())
+			if (!bone_stream.translations.are_animated())
 				continue;
 
 			const uint32_t num_samples = bone_stream.translations.get_num_samples();
@@ -284,7 +284,7 @@ namespace acl
 			ACL_ASSERT(bone_stream.scales.get_sample_size() == sizeof(Vector4_32), "Unexpected scale sample size. %u != %u", bone_stream.scales.get_sample_size(), sizeof(Vector4_32));
 
 			// Constant or default tracks are not normalized
-			if (!bone_stream.is_scale_animated())
+			if (!bone_stream.scales.are_animated())
 				continue;
 
 			const uint32_t num_samples = bone_stream.scales.get_num_samples();
@@ -366,7 +366,7 @@ namespace acl
 			{
 				const BoneStreams& bone_stream = segment.bone_streams[bone_index];
 
-				if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Rotations) && bone_stream.is_rotation_animated())
+				if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Rotations) && bone_stream.rotations.are_animated())
 				{
 					if (bone_stream.rotations.get_rotation_format() == RotationFormat8::Quat_128)
 						range_data_size += k_segment_range_reduction_num_bytes_per_component * 8;
@@ -374,10 +374,10 @@ namespace acl
 						range_data_size += k_segment_range_reduction_num_bytes_per_component * 6;
 				}
 
-				if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Translations) && bone_stream.is_translation_animated())
+				if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Translations) && bone_stream.translations.are_animated())
 					range_data_size += k_segment_range_reduction_num_bytes_per_component * 6;
 
-				if (has_scale && are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Scales) && bone_stream.is_scale_animated())
+				if (has_scale && are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Scales) && bone_stream.scales.are_animated())
 					range_data_size += k_segment_range_reduction_num_bytes_per_component * 6;
 			}
 

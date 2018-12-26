@@ -98,43 +98,49 @@ namespace acl
 
 			if (is_rotation_track_constant(bone_stream.rotations, rotation_threshold_angle))
 			{
-				RotationTrackStream constant_stream(allocator, 1, bone_stream.rotations.get_sample_size(), bone_stream.rotations.get_sample_rate(), bone_stream.rotations.get_rotation_format());
-				Vector4_32 rotation = bone_stream.rotations.get_raw_sample<Vector4_32>(0);
-				constant_stream.set_raw_sample(0, rotation);
+				RotationTrackStream& clip_stream = bone_stream.rotations;
 
-				bone_stream.rotations = std::move(constant_stream);
-				bone_stream.is_rotation_constant = true;
-				bone_stream.is_rotation_default = quat_near_identity(vector_to_quat(rotation), rotation_threshold_angle);
+				const Vector4_32 rotation = clip_stream.get_raw_sample<Vector4_32>(0);
+				const bool is_constant = true;
+				const bool is_default = quat_near_identity(vector_to_quat(rotation), rotation_threshold_angle);
+
+				RotationTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_rotation_format(), is_constant, is_default);
+				constant_stream.set_raw_sample(0, rotation);
+				clip_stream = std::move(constant_stream);
 
 				bone_range.rotation = TrackStreamRange::from_min_extent(rotation, vector_zero_32());
 			}
 
 			if (bone_range.translation.is_constant(translation_threshold))
 			{
-				TranslationTrackStream constant_stream(allocator, 1, bone_stream.translations.get_sample_size(), bone_stream.translations.get_sample_rate(), bone_stream.translations.get_vector_format());
-				Vector4_32 translation = bone_stream.translations.get_raw_sample<Vector4_32>(0);
-				constant_stream.set_raw_sample(0, translation);
+				TranslationTrackStream& clip_stream = bone_stream.translations;
 
-				bone_stream.translations = std::move(constant_stream);
-				bone_stream.is_translation_constant = true;
-				bone_stream.is_translation_default = vector_all_near_equal3(translation, vector_zero_32(), translation_threshold);
+				const Vector4_32 translation = clip_stream.get_raw_sample<Vector4_32>(0);
+				const bool is_constant = true;
+				const bool is_default = vector_all_near_equal3(translation, vector_zero_32(), translation_threshold);
+
+				TranslationTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_vector_format(), is_constant, is_default);
+				constant_stream.set_raw_sample(0, translation);
+				clip_stream = std::move(constant_stream);
 
 				bone_range.translation = TrackStreamRange::from_min_extent(translation, vector_zero_32());
 			}
 
 			if (bone_range.scale.is_constant(scale_threshold))
 			{
-				ScaleTrackStream constant_stream(allocator, 1, bone_stream.scales.get_sample_size(), bone_stream.scales.get_sample_rate(), bone_stream.scales.get_vector_format());
-				Vector4_32 scale = bone_stream.scales.get_raw_sample<Vector4_32>(0);
-				constant_stream.set_raw_sample(0, scale);
+				ScaleTrackStream& clip_stream = bone_stream.scales;
 
-				bone_stream.scales = std::move(constant_stream);
-				bone_stream.is_scale_constant = true;
-				bone_stream.is_scale_default = vector_all_near_equal3(scale, default_scale, scale_threshold);
+				const Vector4_32 scale = clip_stream.get_raw_sample<Vector4_32>(0);
+				const bool is_constant = true;
+				const bool is_default = vector_all_near_equal3(scale, default_scale, scale_threshold);
+
+				ScaleTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_vector_format(), is_constant, is_default);
+				constant_stream.set_raw_sample(0, scale);
+				clip_stream = std::move(constant_stream);
 
 				bone_range.scale = TrackStreamRange::from_min_extent(scale, vector_zero_32());
 
-				num_default_bone_scales += bone_stream.is_scale_default ? 1 : 0;
+				num_default_bone_scales += bone_stream.scales.are_default() ? 1 : 0;
 			}
 		}
 

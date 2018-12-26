@@ -53,13 +53,13 @@ namespace acl
 		const SegmentContext& segment = clip_context.segments[0];
 		for (const BoneStreams& bone_stream : segment.const_bone_iterator())
 		{
-			if (bone_stream.is_rotation_animated())
+			if (bone_stream.rotations.are_animated())
 				range_data_size += rotation_size;
 
-			if (bone_stream.is_translation_animated())
+			if (bone_stream.translations.are_animated())
 				range_data_size += translation_size;
 
-			if (clip_context.has_scale && bone_stream.is_scale_animated())
+			if (clip_context.has_scale && bone_stream.scales.are_animated())
 				range_data_size += scale_size;
 		}
 
@@ -120,7 +120,7 @@ namespace acl
 			// value = (normalized value * range extent) + range min
 			// normalized value = (value - range min) / range extent
 
-			if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Rotations) && bone_stream.is_rotation_animated())
+			if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Rotations) && bone_stream.rotations.are_animated())
 			{
 				const Vector4_32 range_min = bone_range.rotation.get_min();
 				const Vector4_32 range_extent = bone_range.rotation.get_extent();
@@ -162,10 +162,10 @@ namespace acl
 				}
 			}
 
-			if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Translations) && bone_stream.is_translation_animated())
+			if (are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Translations) && bone_stream.translations.are_animated())
 				write_range_track_data_impl(bone_stream.translations, bone_range.translation, is_clip_range_data, range_data);
 
-			if (clip_context.has_scale && are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Scales) && bone_stream.is_scale_animated())
+			if (clip_context.has_scale && are_any_enum_flags_set(range_reduction, RangeReductionFlags8::Scales) && bone_stream.scales.are_animated())
 				write_range_track_data_impl(bone_stream.scales, bone_range.scale, is_clip_range_data, range_data);
 
 			ACL_ASSERT(range_data <= range_data_end, "Invalid range data offset. Wrote too much data.");

@@ -24,6 +24,7 @@
 // SOFTWARE.
 ////////////////////////////////////////////////////////////////////////////////
 
+#include "acl/compression/skeleton.h"
 #include "acl/core/iallocator.h"
 #include "acl/core/compiler_utils.h"
 #include "acl/core/error.h"
@@ -91,9 +92,31 @@ namespace acl
 				return get_packed_vector_size(m_format.vector);
 		}
 
+		void set_constant(bool v) { m_constant = v; }
+		bool is_constant()  const { return m_constant; }
+		bool are_constant() const { return m_constant; }
+
+		void set_default(bool v) { m_default = v; }
+		bool is_default()  const { return m_default; }
+		bool are_default() const { return m_default; }
+
+		bool is_animated()  const { return !m_constant && !m_default; }
+		bool are_animated() const { return is_animated(); }
+
 	protected:
-		TrackStream(AnimationTrackType8 type, TrackFormat8 format) : m_allocator(nullptr), m_samples(nullptr), m_num_samples(0), m_sample_size(0), m_type(type), m_format(format), m_bit_rate(0) {}
-		TrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, AnimationTrackType8 type, TrackFormat8 format, uint8_t bit_rate)
+		TrackStream(AnimationTrackType8 type, TrackFormat8 format)
+			: m_allocator(nullptr)
+			, m_samples(nullptr)
+			, m_num_samples(0)
+			, m_sample_size(0)
+			, m_type(type)
+			, m_format(format)
+			, m_bit_rate(0)
+			, m_constant(false)
+			, m_default(false)
+		{}
+
+		TrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, AnimationTrackType8 type, TrackFormat8 format, uint8_t bit_rate, bool are_constant, bool are_default)
 			: m_allocator(&allocator)
 			, m_samples(reinterpret_cast<uint8_t*>(allocator.allocate(sample_size * num_samples + k_padding, 16)))
 			, m_num_samples(num_samples)
@@ -102,6 +125,8 @@ namespace acl
 			, m_type(type)
 			, m_format(format)
 			, m_bit_rate(bit_rate)
+			, m_constant(are_constant)
+			, m_default(are_default)
 		{}
 
 		TrackStream(const TrackStream&) = delete;
@@ -114,6 +139,8 @@ namespace acl
 			, m_type(other.m_type)
 			, m_format(other.m_format)
 			, m_bit_rate(other.m_bit_rate)
+			, m_constant(other.m_constant)
+			, m_default(other.m_default)
 		{
 			new(&other) TrackStream(other.m_type, other.m_format);
 		}
@@ -135,6 +162,8 @@ namespace acl
 			std::swap(m_type, rhs.m_type);
 			std::swap(m_format, rhs.m_format);
 			std::swap(m_bit_rate, rhs.m_bit_rate);
+			std::swap(m_constant, rhs.m_constant);
+			std::swap(m_default, rhs.m_default);
 			return *this;
 		}
 
@@ -150,6 +179,8 @@ namespace acl
 				copy.m_sample_rate = m_sample_rate;
 				copy.m_format = m_format;
 				copy.m_bit_rate = m_bit_rate;
+				copy.m_constant = m_constant;
+				copy.m_default = m_default;
 
 				std::memcpy(copy.m_samples, m_samples, (size_t)m_sample_size * m_num_samples);
 			}
@@ -167,14 +198,17 @@ namespace acl
 		AnimationTrackType8		m_type;
 		TrackFormat8			m_format;
 		uint8_t					m_bit_rate;
+
+		bool					m_constant;
+		bool					m_default;
 	};
 
 	class RotationTrackStream : public TrackStream
 	{
 	public:
 		RotationTrackStream() : TrackStream(AnimationTrackType8::Rotation, TrackFormat8(RotationFormat8::Quat_128)) {}
-		RotationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, RotationFormat8 format, uint8_t bit_rate = k_invalid_bit_rate)
-			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Rotation, TrackFormat8(format), bit_rate)
+		RotationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, RotationFormat8 format, bool are_constant, bool are_default, uint8_t bit_rate = k_invalid_bit_rate)
+			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Rotation, TrackFormat8(format), bit_rate, are_constant, are_default)
 		{}
 		RotationTrackStream(const RotationTrackStream&) = delete;
 		RotationTrackStream(RotationTrackStream&& other)
@@ -202,8 +236,8 @@ namespace acl
 	{
 	public:
 		TranslationTrackStream() : TrackStream(AnimationTrackType8::Translation, TrackFormat8(VectorFormat8::Vector3_96)) {}
-		TranslationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, uint8_t bit_rate = k_invalid_bit_rate)
-			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Translation, TrackFormat8(format), bit_rate)
+		TranslationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, bool are_constant, bool are_default, uint8_t bit_rate = k_invalid_bit_rate)
+			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Translation, TrackFormat8(format), bit_rate, are_constant, are_default)
 		{}
 		TranslationTrackStream(const TranslationTrackStream&) = delete;
 		TranslationTrackStream(TranslationTrackStream&& other)
@@ -231,8 +265,8 @@ namespace acl
 	{
 	public:
 		ScaleTrackStream() : TrackStream(AnimationTrackType8::Scale, TrackFormat8(VectorFormat8::Vector3_96)) {}
-		ScaleTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, uint8_t bit_rate = k_invalid_bit_rate)
-			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Scale, TrackFormat8(format), bit_rate)
+		ScaleTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, bool are_constant, bool are_default, uint8_t bit_rate = k_invalid_bit_rate)
+			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Scale, TrackFormat8(format), bit_rate, are_constant, are_default)
 		{}
 		ScaleTrackStream(const ScaleTrackStream&) = delete;
 		ScaleTrackStream(ScaleTrackStream&& other)
@@ -317,17 +351,6 @@ namespace acl
 		TranslationTrackStream translations;
 		ScaleTrackStream scales;
 
-		bool is_rotation_constant;
-		bool is_rotation_default;
-		bool is_translation_constant;
-		bool is_translation_default;
-		bool is_scale_constant;
-		bool is_scale_default;
-
-		bool is_rotation_animated() const { return !is_rotation_constant && !is_rotation_default; }
-		bool is_translation_animated() const { return !is_translation_constant && !is_translation_default; }
-		bool is_scale_animated() const { return !is_scale_constant && !is_scale_default; }
-
 		bool is_stripped_from_output() const { return output_index == k_invalid_bone_index; }
 
 		BoneStreams duplicate() const
@@ -340,12 +363,6 @@ namespace acl
 			copy.rotations = rotations.duplicate();
 			copy.translations = translations.duplicate();
 			copy.scales = scales.duplicate();
-			copy.is_rotation_constant = is_rotation_constant;
-			copy.is_rotation_default = is_rotation_default;
-			copy.is_translation_constant = is_translation_constant;
-			copy.is_translation_default = is_translation_default;
-			copy.is_scale_constant = is_scale_constant;
-			copy.is_scale_default = is_scale_default;
 			return copy;
 		}
 	};
