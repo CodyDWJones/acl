@@ -103,8 +103,10 @@ namespace acl
 		bool is_animated()  const { return !m_constant && !m_default; }
 		bool are_animated() const { return is_animated(); }
 
+		uint16_t get_bone_index() const { return m_bone_index; }
+
 	protected:
-		TrackStream(AnimationTrackType8 type, TrackFormat8 format)
+		TrackStream(uint16_t bone_index, AnimationTrackType8 type, TrackFormat8 format)
 			: m_allocator(nullptr)
 			, m_samples(nullptr)
 			, m_num_samples(0)
@@ -114,9 +116,10 @@ namespace acl
 			, m_bit_rate(0)
 			, m_constant(false)
 			, m_default(false)
+			, m_bone_index(bone_index)
 		{}
 
-		TrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, AnimationTrackType8 type, TrackFormat8 format, uint8_t bit_rate, bool are_constant, bool are_default)
+		TrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, AnimationTrackType8 type, TrackFormat8 format, uint8_t bit_rate, bool are_constant, bool are_default, uint16_t bone_index)
 			: m_allocator(&allocator)
 			, m_samples(reinterpret_cast<uint8_t*>(allocator.allocate(sample_size * num_samples + k_padding, 16)))
 			, m_num_samples(num_samples)
@@ -127,6 +130,7 @@ namespace acl
 			, m_bit_rate(bit_rate)
 			, m_constant(are_constant)
 			, m_default(are_default)
+			, m_bone_index(bone_index)
 		{}
 
 		TrackStream(const TrackStream&) = delete;
@@ -141,8 +145,9 @@ namespace acl
 			, m_bit_rate(other.m_bit_rate)
 			, m_constant(other.m_constant)
 			, m_default(other.m_default)
+			, m_bone_index(other.m_bone_index)
 		{
-			new(&other) TrackStream(other.m_type, other.m_format);
+			new(&other) TrackStream(other.m_bone_index, other.m_type, other.m_format);
 		}
 
 		~TrackStream()
@@ -164,6 +169,7 @@ namespace acl
 			std::swap(m_bit_rate, rhs.m_bit_rate);
 			std::swap(m_constant, rhs.m_constant);
 			std::swap(m_default, rhs.m_default);
+			std::swap(m_bone_index, rhs.m_bone_index);
 			return *this;
 		}
 
@@ -181,6 +187,7 @@ namespace acl
 				copy.m_bit_rate = m_bit_rate;
 				copy.m_constant = m_constant;
 				copy.m_default = m_default;
+				copy.m_bone_index = m_bone_index;
 
 				std::memcpy(copy.m_samples, m_samples, (size_t)m_sample_size * m_num_samples);
 			}
@@ -201,14 +208,15 @@ namespace acl
 
 		bool					m_constant;
 		bool					m_default;
+		uint16_t				m_bone_index;
 	};
 
 	class RotationTrackStream : public TrackStream
 	{
 	public:
-		RotationTrackStream() : TrackStream(AnimationTrackType8::Rotation, TrackFormat8(RotationFormat8::Quat_128)) {}
-		RotationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, RotationFormat8 format, bool are_constant, bool are_default, uint8_t bit_rate = k_invalid_bit_rate)
-			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Rotation, TrackFormat8(format), bit_rate, are_constant, are_default)
+		RotationTrackStream() : TrackStream(k_invalid_bone_index, AnimationTrackType8::Rotation, TrackFormat8(RotationFormat8::Quat_128)) {}
+		RotationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, RotationFormat8 format, bool are_constant, bool are_default, uint16_t bone_index, uint8_t bit_rate = k_invalid_bit_rate)
+			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Rotation, TrackFormat8(format), bit_rate, are_constant, are_default, bone_index)
 		{}
 		RotationTrackStream(const RotationTrackStream&) = delete;
 		RotationTrackStream(RotationTrackStream&& other)
@@ -235,9 +243,9 @@ namespace acl
 	class TranslationTrackStream : public TrackStream
 	{
 	public:
-		TranslationTrackStream() : TrackStream(AnimationTrackType8::Translation, TrackFormat8(VectorFormat8::Vector3_96)) {}
-		TranslationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, bool are_constant, bool are_default, uint8_t bit_rate = k_invalid_bit_rate)
-			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Translation, TrackFormat8(format), bit_rate, are_constant, are_default)
+		TranslationTrackStream() : TrackStream(k_invalid_bone_index, AnimationTrackType8::Translation, TrackFormat8(VectorFormat8::Vector3_96)) {}
+		TranslationTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, bool are_constant, bool are_default, uint16_t bone_index, uint8_t bit_rate = k_invalid_bit_rate)
+			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Translation, TrackFormat8(format), bit_rate, are_constant, are_default, bone_index)
 		{}
 		TranslationTrackStream(const TranslationTrackStream&) = delete;
 		TranslationTrackStream(TranslationTrackStream&& other)
@@ -264,9 +272,9 @@ namespace acl
 	class ScaleTrackStream : public TrackStream
 	{
 	public:
-		ScaleTrackStream() : TrackStream(AnimationTrackType8::Scale, TrackFormat8(VectorFormat8::Vector3_96)) {}
-		ScaleTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, bool are_constant, bool are_default, uint8_t bit_rate = k_invalid_bit_rate)
-			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Scale, TrackFormat8(format), bit_rate, are_constant, are_default)
+		ScaleTrackStream() : TrackStream(k_invalid_bone_index, AnimationTrackType8::Scale, TrackFormat8(VectorFormat8::Vector3_96)) {}
+		ScaleTrackStream(IAllocator& allocator, uint32_t num_samples, uint32_t sample_size, uint32_t sample_rate, VectorFormat8 format, bool are_constant, bool are_default, uint16_t bone_index, uint8_t bit_rate = k_invalid_bit_rate)
+			: TrackStream(allocator, num_samples, sample_size, sample_rate, AnimationTrackType8::Scale, TrackFormat8(format), bit_rate, are_constant, are_default, bone_index)
 		{}
 		ScaleTrackStream(const ScaleTrackStream&) = delete;
 		ScaleTrackStream(ScaleTrackStream&& other)

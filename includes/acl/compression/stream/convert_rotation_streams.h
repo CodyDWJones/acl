@@ -69,7 +69,7 @@ namespace acl
 
 			const uint32_t num_samples = bone_stream.rotations.get_num_samples();
 
-			RotationTrackStream converted_stream(allocator, num_samples, sizeof(Quat_32), bone_stream.rotations.get_sample_rate(), high_precision_format, bone_stream.rotations.are_constant(), bone_stream.rotations.are_default());
+			RotationTrackStream converted_stream(allocator, num_samples, sizeof(Quat_32), bone_stream.rotations.get_sample_rate(), high_precision_format, bone_stream.rotations.are_constant(), bone_stream.rotations.are_default(), bone_stream.bone_index);
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{

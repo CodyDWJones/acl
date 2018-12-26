@@ -104,7 +104,7 @@ namespace acl
 				const bool is_constant = true;
 				const bool is_default = quat_near_identity(vector_to_quat(rotation), rotation_threshold_angle);
 
-				RotationTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_rotation_format(), is_constant, is_default);
+				RotationTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_rotation_format(), is_constant, is_default, bone_index);
 				constant_stream.set_raw_sample(0, rotation);
 				clip_stream = std::move(constant_stream);
 
@@ -119,7 +119,7 @@ namespace acl
 				const bool is_constant = true;
 				const bool is_default = vector_all_near_equal3(translation, vector_zero_32(), translation_threshold);
 
-				TranslationTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_vector_format(), is_constant, is_default);
+				TranslationTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_vector_format(), is_constant, is_default, bone_index);
 				constant_stream.set_raw_sample(0, translation);
 				clip_stream = std::move(constant_stream);
 
@@ -134,7 +134,7 @@ namespace acl
 				const bool is_constant = true;
 				const bool is_default = vector_all_near_equal3(scale, default_scale, scale_threshold);
 
-				ScaleTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_vector_format(), is_constant, is_default);
+				ScaleTrackStream constant_stream(allocator, 1, clip_stream.get_sample_size(), clip_stream.get_sample_rate(), clip_stream.get_vector_format(), is_constant, is_default, bone_index);
 				constant_stream.set_raw_sample(0, scale);
 				clip_stream = std::move(constant_stream);
 

@@ -121,7 +121,7 @@ namespace acl
 					const RotationTrackStream& clip_stream = clip_bone_stream.rotations;
 					const uint32_t sample_size = clip_stream.get_sample_size();
 
-					RotationTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_rotation_format(), clip_stream.are_constant(), clip_stream.are_default(), clip_stream.get_bit_rate());
+					RotationTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_rotation_format(), clip_stream.are_constant(), clip_stream.are_default(), bone_index, clip_stream.get_bit_rate());
 					memcpy(segment_stream.get_raw_sample_ptr(0), clip_stream.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
 
 					segment_bone_stream.rotations = std::move(segment_stream);
@@ -136,7 +136,7 @@ namespace acl
 					const TranslationTrackStream& clip_stream = clip_bone_stream.translations;
 					const uint32_t sample_size = clip_stream.get_sample_size();
 
-					TranslationTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_vector_format(), clip_stream.are_constant(), clip_stream.are_default(), clip_stream.get_bit_rate());
+					TranslationTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_vector_format(), clip_stream.are_constant(), clip_stream.are_default(), bone_index, clip_stream.get_bit_rate());
 					memcpy(segment_stream.get_raw_sample_ptr(0), clip_stream.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
 
 					segment_bone_stream.translations = std::move(segment_stream);
@@ -151,7 +151,7 @@ namespace acl
 					const ScaleTrackStream& clip_stream = clip_bone_stream.scales;
 					const uint32_t sample_size = clip_stream.get_sample_size();
 
-					ScaleTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_vector_format(), clip_stream.are_constant(), clip_stream.are_default(), clip_stream.get_bit_rate());
+					ScaleTrackStream segment_stream(allocator, num_samples_in_segment, sample_size, clip_stream.get_sample_rate(), clip_stream.get_vector_format(), clip_stream.are_constant(), clip_stream.are_default(), bone_index, clip_stream.get_bit_rate());
 					memcpy(segment_stream.get_raw_sample_ptr(0), clip_stream.get_raw_sample_ptr(clip_sample_index), size_t(num_samples_in_segment) * sample_size);
 
 					segment_bone_stream.scales = std::move(segment_stream);

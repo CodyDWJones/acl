@@ -128,7 +128,7 @@ namespace acl
 
 			const uint32_t num_samples = raw_stream.get_num_samples();
 
-			RotationTrackStream quantized_stream(allocator, num_samples, get_packed_rotation_size(rotation_format), raw_stream.get_sample_rate(), rotation_format, raw_stream.is_constant(), raw_stream.is_default());
+			RotationTrackStream quantized_stream(allocator, num_samples, get_packed_rotation_size(rotation_format), raw_stream.get_sample_rate(), rotation_format, raw_stream.is_constant(), raw_stream.is_default(), raw_stream.get_bone_index());
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -184,7 +184,7 @@ namespace acl
 			const uint32_t num_samples = is_constant_bit_rate(bit_rate) ? 1 : raw_segment_stream.get_num_samples();
 			const uint32_t sample_size = sizeof(uint64_t) * 2;
 
-			RotationTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), RotationFormat8::QuatDropW_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), bit_rate);
+			RotationTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), RotationFormat8::QuatDropW_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), raw_segment_stream.get_bone_index(), bit_rate);
 
 			if (is_constant_bit_rate(bit_rate))
 			{
@@ -257,7 +257,7 @@ namespace acl
 
 			const uint32_t num_samples = raw_stream.get_num_samples();
 
-			TranslationTrackStream quantized_stream(allocator, num_samples, get_packed_vector_size(translation_format), raw_stream.get_sample_rate(), translation_format, raw_stream.is_constant(), raw_stream.is_default());
+			TranslationTrackStream quantized_stream(allocator, num_samples, get_packed_vector_size(translation_format), raw_stream.get_sample_rate(), translation_format, raw_stream.is_constant(), raw_stream.is_default(), raw_stream.get_bone_index());
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -310,7 +310,7 @@ namespace acl
 			const uint32_t num_samples = is_constant_bit_rate(bit_rate) ? 1 : raw_segment_stream.get_num_samples();
 			const uint32_t sample_size = sizeof(uint64_t) * 2;
 
-			TranslationTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), VectorFormat8::Vector3_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), bit_rate);
+			TranslationTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), VectorFormat8::Vector3_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), raw_segment_stream.get_bone_index(), bit_rate);
 
 			if (is_constant_bit_rate(bit_rate))
 			{
@@ -373,7 +373,7 @@ namespace acl
 
 			const uint32_t num_samples = raw_stream.get_num_samples();
 
-			ScaleTrackStream quantized_stream(allocator, num_samples, get_packed_vector_size(scale_format), raw_stream.get_sample_rate(), scale_format, raw_stream.is_constant(), raw_stream.is_default());
+			ScaleTrackStream quantized_stream(allocator, num_samples, get_packed_vector_size(scale_format), raw_stream.get_sample_rate(), scale_format, raw_stream.is_constant(), raw_stream.is_default(), raw_stream.get_bone_index());
 
 			for (uint32_t sample_index = 0; sample_index < num_samples; ++sample_index)
 			{
@@ -426,7 +426,7 @@ namespace acl
 			const uint32_t num_samples = is_constant_bit_rate(bit_rate) ? 1 : raw_segment_stream.get_num_samples();
 			const uint32_t sample_size = sizeof(uint64_t) * 2;
 
-			ScaleTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), VectorFormat8::Vector3_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), bit_rate);
+			ScaleTrackStream quantized_stream(context.allocator, num_samples, sample_size, raw_segment_stream.get_sample_rate(), VectorFormat8::Vector3_Variable, raw_segment_stream.is_constant(), raw_segment_stream.is_default(), raw_segment_stream.get_bone_index(), bit_rate);
 
 			if (is_constant_bit_rate(bit_rate))
 			{
