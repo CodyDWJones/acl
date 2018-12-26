@@ -74,26 +74,35 @@ namespace acl
 	//////////////////////////////////////////////////////////////////////////
 
 	template<typename AllocatedType, typename... Args>
-	AllocatedType* allocate_type(IAllocator& allocator, Args&&... args)
+	AllocatedType* allocate_type_aligned_size(IAllocator& allocator, size_t size, size_t alignment, Args&&... args)
 	{
-		AllocatedType* ptr = reinterpret_cast<AllocatedType*>(allocator.allocate(sizeof(AllocatedType), alignof(AllocatedType)));
+		ACL_ASSERT(is_alignment_valid<AllocatedType>(alignment), "Invalid alignment: %u. Expected a power of two at least equal to %u", alignment, alignof(AllocatedType));
+		AllocatedType* ptr = reinterpret_cast<AllocatedType*>(allocator.allocate(size, alignment));
 		if (acl_impl::is_trivially_default_constructible<AllocatedType>::value)
 			return ptr;
 		return new(ptr) AllocatedType(std::forward<Args>(args)...);
 	}
 
 	template<typename AllocatedType, typename... Args>
+	AllocatedType* allocate_type(IAllocator& allocator, Args&&... args)
+	{
+		return allocate_type_aligned_size<AllocatedType>(allocator, sizeof(AllocatedType), alignof(AllocatedType), std::forward<Args>(args)...);
+	}
+
+	template<typename AllocatedType, typename... Args>
 	AllocatedType* allocate_type_aligned(IAllocator& allocator, size_t alignment, Args&&... args)
 	{
-		ACL_ASSERT(is_alignment_valid<AllocatedType>(alignment), "Invalid alignment: %u. Expected a power of two at least equal to %u", alignment, alignof(AllocatedType));
-		AllocatedType* ptr = reinterpret_cast<AllocatedType*>(allocator.allocate(sizeof(AllocatedType), alignment));
-		if (acl_impl::is_trivially_default_constructible<AllocatedType>::value)
-			return ptr;
-		return new(ptr) AllocatedType(std::forward<Args>(args)...);
+		return allocate_type_aligned_size<AllocatedType>(allocator, sizeof(AllocatedType), alignment, std::forward<Args>(args)...);
+	}
+
+	template<typename AllocatedType, typename... Args>
+	AllocatedType* allocate_type_size(IAllocator& allocator, size_t size, Args&&... args)
+	{
+		return allocate_type_aligned_size<AllocatedType>(allocator, size, alignof(AllocatedType), std::forward<Args>(args)...);
 	}
 
 	template<typename AllocatedType>
-	void deallocate_type(IAllocator& allocator, AllocatedType* ptr)
+	void deallocate_type_size(IAllocator& allocator, AllocatedType* ptr, size_t size)
 	{
 		if (ptr == nullptr)
 			return;
@@ -101,7 +110,13 @@ namespace acl
 		if (!std::is_trivially_destructible<AllocatedType>::value)
 			ptr->~AllocatedType();
 
-		allocator.deallocate(ptr, sizeof(AllocatedType));
+		allocator.deallocate(ptr, size);
+	}
+
+	template<typename AllocatedType>
+	void deallocate_type(IAllocator& allocator, AllocatedType* ptr)
+	{
+		deallocate_type_size(allocator, ptr, sizeof(AllocatedType));
 	}
 
 	template<typename AllocatedType, typename... Args>
