@@ -102,7 +102,13 @@ TEST_CASE("bitset", "[core][utils]")
 	REQUIRE(bitset_data[1] == 0x80000000);
 	REQUIRE(bitset_data[2] == 0);
 
-	REQUIRE(bitset_test(&bitset_data[0], desc, 0) == true);
+	uint32_t mask[] = { 0x80000001, 0 };
+	bitset_inverse_mask(&bitset_data[0], desc, mask, desc);
+	REQUIRE(bitset_data[0] == 0x00C00000);
+	REQUIRE(bitset_data[1] == 0x80000000);
+	REQUIRE(bitset_data[2] == 0);
+
+	REQUIRE(bitset_test(&bitset_data[0], desc, 0) == false);
 	REQUIRE(bitset_test(&bitset_data[0], desc, 1) == false);
 	REQUIRE(bitset_test(&bitset_data[0], desc, 2) == false);
 	REQUIRE(bitset_test(&bitset_data[0], desc, 3) == false);
@@ -116,5 +122,5 @@ TEST_CASE("bitset", "[core][utils]")
 	REQUIRE(bitset_test(&bitset_data[0], desc, 11) == false);
 
 	bitset_data[2] = 0xFFFFFFFF;
-	REQUIRE(bitset_count_set_bits(&bitset_data[0], desc) == 4);
+	REQUIRE(bitset_count_set_bits(&bitset_data[0], desc) == 3);
 }

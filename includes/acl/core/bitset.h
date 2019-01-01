@@ -159,6 +159,20 @@ namespace acl
 	}
 
 	////////////////////////////////////////////////////////////////////////////////
+	// Clears the bits where the corresponding inverse mask bit is set and leaves the others untouched.
+	inline void bitset_inverse_mask(uint32_t* bitset, const BitSetDescription& desc, const uint32_t* inverse_mask_bitset, const BitSetDescription& inverse_mask_desc)
+	{
+		(void)inverse_mask_desc;
+
+		ACL_ASSERT(desc.get_num_bits() == inverse_mask_desc.get_num_bits(), "Cannot operate on bitsets with different lengths");
+
+		const uint32_t size = desc.get_size();
+
+		for (uint32_t offset = 0; offset < size; ++offset)
+			bitset[offset] &= ~inverse_mask_bitset[offset];
+	}
+
+	////////////////////////////////////////////////////////////////////////////////
 	// Returns the bit value as a specific index.
 	inline bool bitset_test(const uint32_t* bitset, BitSetDescription desc, uint32_t bit_index)
 	{
