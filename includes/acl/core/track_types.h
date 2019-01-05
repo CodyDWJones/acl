@@ -79,6 +79,8 @@ namespace acl
 		Scale,
 	};
 
+	constexpr AnimationTrackType8 k_track_types[] = { AnimationTrackType8::Rotation, AnimationTrackType8::Translation, AnimationTrackType8::Scale };
+
 	enum class RotationVariant8 : uint8_t
 	{
 		Quat,
