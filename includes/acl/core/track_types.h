@@ -25,6 +25,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "acl/core/compiler_utils.h"
+#include "acl/core/error.h"
 
 #include <cstdint>
 #include <cstring>
